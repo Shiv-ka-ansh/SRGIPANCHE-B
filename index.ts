@@ -2,6 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { errorHandler } from './middleware/errorHandler';
 
 import authRoutes from './routes/auth';
@@ -17,6 +19,18 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+
+// Security Middlewares
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+app.use(limiter);
 
 // Middleware
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
