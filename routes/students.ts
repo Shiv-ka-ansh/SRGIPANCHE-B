@@ -9,7 +9,8 @@ const router = Router();
 // POST /api/students/register
 router.post('/register', async (req, res, next) => {
   try {
-    const { fullName, rollNo, course, branch, section, year, mobileNo, email } = req.body;
+    const { fullName, rollNo, course, section, year, mobileNo, email } = req.body;
+    const branch = req.body.branch?.toUpperCase().trim();
 
     // Basic validation
     if (!fullName || !rollNo || !course || !branch || !section || !year || !mobileNo || !email) {
@@ -79,7 +80,23 @@ router.post('/verify-token', verifyToken, requireAdmin, async (req, res, next) =
 // GET /api/students (Admin/SuperAdmin)
 router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const students = await Student.find().sort({ registeredAt: -1 });
+    const { search, branch } = req.query;
+    let query: any = {};
+
+    if (search) {
+      const searchRegex = new RegExp(search as string, 'i');
+      query.$or = [
+        { fullName: searchRegex },
+        { rollNo: searchRegex },
+        { email: searchRegex },
+      ];
+    }
+
+    if (branch && branch !== 'All') {
+      query.branch = branch;
+    }
+
+    const students = await Student.find(query).sort({ registeredAt: -1 });
     res.json({ success: true, students });
   } catch (error) {
     next(error);
@@ -90,6 +107,24 @@ router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
 router.get('/:id', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const student = await Student.findById(req.params.id);
+    if (!student) {
+      return res.status(404).json({ success: false, error: 'Student not found' });
+    }
+    res.json({ success: true, student });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/students/:id (Admin/SuperAdmin)
+router.put('/:id', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const { fullName, rollNo, course, branch, section, year, mobileNo, email } = req.body;
+    const student = await Student.findByIdAndUpdate(
+      req.params.id,
+      { fullName, rollNo, course, branch, section, year, mobileNo, email },
+      { new: true, runValidators: true }
+    );
     if (!student) {
       return res.status(404).json({ success: false, error: 'Student not found' });
     }

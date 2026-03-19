@@ -10,6 +10,9 @@ export interface IEventRegistration extends Document {
     amount: number;
     subEvent?: string;
   }[];
+  isGroup: boolean;
+  groupMembers?: string[];
+  participantIds?: mongoose.Types.ObjectId[];
   totalAmount: number;
   processedBy: mongoose.Types.ObjectId;
   processedAt: Date;
@@ -28,6 +31,9 @@ const EventRegistrationSchema: Schema = new Schema({
       subEvent: { type: String },
     },
   ],
+  isGroup: { type: Boolean, default: false },
+  groupMembers: [{ type: String }],
+  participantIds: [{ type: Schema.Types.ObjectId, ref: 'Student' }],
   totalAmount: { type: Number, required: true },
   processedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   processedAt: { type: Date, default: Date.now },

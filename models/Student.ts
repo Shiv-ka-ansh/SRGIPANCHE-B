@@ -20,7 +20,7 @@ const StudentSchema: Schema = new Schema({
   fullName: { type: String, required: true },
   rollNo: { type: String, required: true, unique: true, uppercase: true, trim: true },
   course: { type: String, required: true },
-  branch: { type: String, required: true },
+  branch: { type: String, required: true, uppercase: true, trim: true },
   section: { type: String, required: true },
   year: { type: String, required: true },
   mobileNo: { type: String, required: true },

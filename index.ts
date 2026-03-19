@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth';
 import studentRoutes from './routes/students';
 import eventRegistrationRoutes from './routes/eventRegistrations';
+import eventRoutes from './routes/events';
 import scheduleRoutes from './routes/schedule';
 import userRoutes from './routes/users';
 import exportRoutes from './routes/export';
@@ -46,6 +47,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/panache2k
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/events', eventRoutes);
 app.use('/api/event-registrations', eventRegistrationRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/users', userRoutes);
