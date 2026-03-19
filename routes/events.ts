@@ -17,13 +17,13 @@ router.get('/', async (req, res, next) => {
 // POST /api/events (SuperAdmin only)
 router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
-    const { category, name, amount, subEvents, color } = req.body;
+    const { category, name, amount, subEvents, color, description, rules, coordinators } = req.body;
     
     if (!category || !name || !amount || !color) {
       return res.status(400).json({ success: false, error: 'Category, name, amount, and color are required' });
     }
 
-    const event = new Event({ category, name, amount, subEvents, color });
+    const event = new Event({ category, name, amount, subEvents, color, description, rules, coordinators });
     await event.save();
     
     res.status(201).json({ success: true, event });
@@ -35,10 +35,10 @@ router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
 // PUT /api/events/:id (SuperAdmin only)
 router.put('/:id', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
-    const { category, name, amount, subEvents, color } = req.body;
+    const { category, name, amount, subEvents, color, description, rules, coordinators } = req.body;
     const event = await Event.findByIdAndUpdate(
       req.params.id,
-      { category, name, amount, subEvents, color },
+      { category, name, amount, subEvents, color, description, rules, coordinators },
       { new: true, runValidators: true }
     );
     
