@@ -1,51 +1,74 @@
 import { Router } from 'express';
 import { Parser } from 'json2csv';
 import exceljs from 'exceljs';
-import Student from '../models/Student';
 import EventRegistration from '../models/EventRegistration';
 import { verifyToken, requireSuperAdmin } from '../middleware/auth';
 
 const router = Router();
 
+/**
+ * Build a MongoDB filter from export query params.
+ * Supported params: category, subEvent, regType, adminName
+ */
+function buildExportFilter(query: any) {
+  const filter: any = {};
+
+  if (query.category) {
+    filter['events.category'] = { $regex: new RegExp(`^${query.category}$`, 'i') };
+  }
+
+  if (query.subEvent) {
+    filter['events.subEvent'] = { $regex: new RegExp(`^${query.subEvent}$`, 'i') };
+  }
+
+  if (query.regType) {
+    if (query.regType === 'single') filter.isGroup = false;
+    if (query.regType === 'group') filter.isGroup = true;
+  }
+
+  return filter;
+}
+
 // GET /api/export/csv
 router.get('/csv', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
-    const students = await Student.find().sort({ registeredAt: 1 }).lean();
-    const registrations = await EventRegistration.find().lean();
-    
-    // Map registrations by studentId for fast lookup
-    const regMap = new Map();
-    registrations.forEach(reg => {
-      regMap.set(reg.studentId.toString(), reg);
-    });
+    const filter = buildExportFilter(req.query);
+    let registrations = await EventRegistration.find(filter)
+      .populate('processedBy', 'name')
+      .sort({ processedAt: 1 })
+      .lean();
 
-    const data = students.map((s, index) => {
-      const reg = regMap.get(s._id.toString());
-      const eventsStr = reg ? reg.events.map((e: any) => e.eventName).join(', ') : '';
-      const totalAmount = reg ? reg.totalAmount : 0;
+    // Post-query filter for adminName (populated field)
+    if (req.query.adminName) {
+      registrations = registrations.filter((r: any) =>
+        r.processedBy?.name?.toLowerCase() === (req.query.adminName as string).toLowerCase()
+      );
+    }
 
+    const data = registrations.map((r: any, index: number) => {
+      const eventsStr = r.events.map((e: any) => e.eventName).join(', ');
+      const categoriesStr = [...new Set(r.events.map((e: any) => e.category))].join(', ');
       return {
         Sr: index + 1,
-        Name: s.fullName,
-        'Roll No': s.rollNo,
-        Token: s.token,
-        Course: s.course,
-        Branch: s.branch,
-        Section: s.section,
-        Year: s.year,
-        Mobile: s.mobileNo,
-        Email: s.email,
-        'Registered At': s.registeredAt.toISOString().split('T')[0],
+        'Student Name': r.studentName,
+        'Roll No': r.rollNo,
+        Type: r.isGroup ? 'Group' : 'Single',
+        'Group Members': r.isGroup && r.groupMembers ? r.groupMembers.join(', ') : '',
+        Categories: categoriesStr,
         Events: eventsStr,
-        'Total Amount': totalAmount,
+        'Total Amount': r.totalAmount,
+        'Processed By': r.processedBy?.name || 'N/A',
+        Date: r.processedAt ? new Date(r.processedAt).toISOString().split('T')[0] : '',
       };
     });
+
+    // No total row appended (noTotal is always true from frontend)
 
     const json2csvParser = new Parser();
     const csv = json2csvParser.parse(data);
 
     res.header('Content-Type', 'text/csv');
-    res.attachment('panache-2k26-registrations.csv');
+    res.attachment('panache-registrations.csv');
     return res.send(csv);
   } catch (error) {
     next(error);
@@ -55,54 +78,54 @@ router.get('/csv', verifyToken, requireSuperAdmin, async (req, res, next) => {
 // GET /api/export/excel
 router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
-    const students = await Student.find().sort({ registeredAt: 1 }).lean();
-    const registrations = await EventRegistration.find().lean();
-    
-    const regMap = new Map();
-    registrations.forEach(reg => { regMap.set(reg.studentId.toString(), reg); });
+    const filter = buildExportFilter(req.query);
+    let registrations = await EventRegistration.find(filter)
+      .populate('processedBy', 'name')
+      .sort({ processedAt: 1 })
+      .lean();
+
+    // Post-query filter for adminName (populated field)
+    if (req.query.adminName) {
+      registrations = registrations.filter((r: any) =>
+        r.processedBy?.name?.toLowerCase() === (req.query.adminName as string).toLowerCase()
+      );
+    }
 
     const workbook = new exceljs.Workbook();
     const worksheet = workbook.addWorksheet('Registrations');
 
     worksheet.columns = [
       { header: 'Sr', key: 'sr', width: 5 },
-      { header: 'Name', key: 'name', width: 20 },
+      { header: 'Student Name', key: 'name', width: 20 },
       { header: 'Roll No', key: 'rollNo', width: 15 },
-      { header: 'Token', key: 'token', width: 10 },
-      { header: 'Course', key: 'course', width: 10 },
-      { header: 'Branch', key: 'branch', width: 15 },
-      { header: 'Section', key: 'section', width: 10 },
-      { header: 'Year', key: 'year', width: 10 },
-      { header: 'Mobile', key: 'mobile', width: 15 },
-      { header: 'Email', key: 'email', width: 25 },
-      { header: 'Registered At', key: 'regAt', width: 15 },
+      { header: 'Type', key: 'type', width: 10 },
+      { header: 'Group Members', key: 'groupMembers', width: 30 },
+      { header: 'Categories', key: 'categories', width: 15 },
       { header: 'Events', key: 'events', width: 30 },
       { header: 'Total Amount', key: 'amount', width: 15 },
+      { header: 'Processed By', key: 'processedBy', width: 15 },
+      { header: 'Date', key: 'date', width: 15 },
     ];
 
     // Styling headers
     worksheet.getRow(1).font = { bold: true };
     worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFF00' } };
 
-    students.forEach((s, index) => {
-      const reg = regMap.get(s._id.toString());
-      const eventsStr = reg ? reg.events.map((e: any) => e.eventName).join(', ') : '';
-      const totalAmount = reg ? reg.totalAmount : 0;
+    registrations.forEach((r: any, index: number) => {
+      const eventsStr = r.events.map((e: any) => e.eventName).join(', ');
+      const categoriesStr = [...new Set(r.events.map((e: any) => e.category))].join(', ');
 
       const row = worksheet.addRow({
         sr: index + 1,
-        name: s.fullName,
-        rollNo: s.rollNo,
-        token: s.token,
-        course: s.course,
-        branch: s.branch,
-        section: s.section,
-        year: s.year,
-        mobile: s.mobileNo,
-        email: s.email,
-        regAt: s.registeredAt.toISOString().split('T')[0],
+        name: r.studentName,
+        rollNo: r.rollNo,
+        type: r.isGroup ? 'Group' : 'Single',
+        groupMembers: r.isGroup && r.groupMembers ? r.groupMembers.join(', ') : '',
+        categories: categoriesStr,
         events: eventsStr,
-        amount: totalAmount,
+        amount: r.totalAmount,
+        processedBy: r.processedBy?.name || 'N/A',
+        date: r.processedAt ? new Date(r.processedAt).toISOString().split('T')[0] : '',
       });
 
       // Alternating row colors
@@ -111,9 +134,11 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
       }
     });
 
+    // No total row appended (noTotal is always true from frontend)
+
     res.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.attachment('panache-2k26-registrations.xlsx');
-    
+    res.attachment('panache-registrations.xlsx');
+
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
