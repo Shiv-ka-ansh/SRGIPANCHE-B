@@ -22,7 +22,8 @@ router.get('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
       
       reg.events.forEach(ev => {
         // Category breakdown
-        categoryBreakdown[ev.category] = (categoryBreakdown[ev.category] || 0) + ev.amount;
+       categoryBreakdown[ev.category] =
+         (categoryBreakdown[ev.category] || 0) + ev.amount;
         
         // Event breakdown
         const eventKey = ev.eventName;
