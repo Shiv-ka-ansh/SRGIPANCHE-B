@@ -1,37 +1,17 @@
 import nodemailer from 'nodemailer';
 
 const createTransporter = () => {
-  if (process.env.RESEND_API_KEY) {
-    // Basic nodemailer Resend config if needed, or via resend SDK
-    return nodemailer.createTransport({
-      host: 'smtp.resend.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: 'resend',
-        pass: process.env.RESEND_API_KEY,
-      },
-    });
-  }
-
   const port = Number(process.env.EMAIL_PORT) || 465;
-  const isSecure = port === 465;
-
-  // Default to SMTP
   return nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: port,
-    secure: isSecure,
+    port,
+    secure: port === 465,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-    tls: {
-      rejectUnauthorized: false, // sometimes needed for certain servers
-    },
-    // Force IPv4 because ENETUNREACH 2607:f8b0... was seen in logs
-    // (render instance may not have IPv6 route)
-    family: 4 
+    tls: { rejectUnauthorized: false },
+    family: 4,
   } as any);
 };
 
@@ -46,32 +26,30 @@ export const sendRegistrationToken = async (
   token: string
 ) => {
   const transporter = createTransporter();
-
-  const mailOptions = {
-    from: process.env.EMAIL_FROM || 'PANACHE 2K26 <panache2k26@gmail.com>',
-    to: email,
-    subject: '🎉 PANACHE 2K26 — Registration Confirmed!',
-    html: `
-      <h2>Hi ${name},</h2>
-      <p>You're officially registered for PANACHE 2K26!</p>
-      
-      <div style="background-color: #121212; color: #CCFF00; padding: 20px; border: 2px solid #CCFF00; box-shadow: 4px 4px 0px #CCFF00; margin: 20px 0; display: inline-block;">
-        <h3 style="margin: 0; color: #fff;">YOUR TOKEN:</h3>
-        <h1 style="font-size: 40px; margin: 10px 0; letter-spacing: 5px;">${token}</h1>
-        <p style="margin: 0; font-size: 14px; color: #ccc;">Keep this safe — you'll need it at the venue</p>
-      </div>
-
-      <p><strong>Details:</strong><br/>
-      • Roll No: ${rollNo}<br/>
-      • Course: ${course} | Branch: ${branch}<br/>
-      • Section: ${section} | Year: ${year}</p>
-      
-      <p>Present this token to the admin desk at the event to register for individual competitions.</p>
-      <p>See you at PANACHE 2K26! 🚀</p>
-    `,
-  };
-
   try {
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || 'PANACHE 2K26 <panache2k26@gmail.com>',
+      to: email,
+      subject: '🎉 PANACHE 2K26 — Registration Confirmed!',
+      html: `
+        <h2>Hi ${name},</h2>
+        <p>You're officially registered for PANACHE 2K26!</p>
+        
+        <div style="background-color: #121212; color: #CCFF00; padding: 20px; border: 2px solid #CCFF00; box-shadow: 4px 4px 0px #CCFF00; margin: 20px 0; display: inline-block;">
+          <h3 style="margin: 0; color: #fff;">YOUR TOKEN:</h3>
+          <h1 style="font-size: 40px; margin: 10px 0; letter-spacing: 5px;">${token}</h1>
+          <p style="margin: 0; font-size: 14px; color: #ccc;">Keep this safe — you'll need it at the venue</p>
+        </div>
+
+        <p><strong>Details:</strong><br/>
+        • Roll No: ${rollNo}<br/>
+        • Course: ${course} | Branch: ${branch}<br/>
+        • Section: ${section} | Year: ${year}</p>
+        
+        <p>Present this token to the admin desk at the event to register for individual competitions.</p>
+        <p>See you at PANACHE 2K26! 🚀</p>
+      `,
+    };
     await transporter.sendMail(mailOptions);
     return true;
   } catch (error) {
