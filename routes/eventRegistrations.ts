@@ -21,7 +21,14 @@ router.post('/', verifyToken, requireAdmin, async (req: AuthRequest, res, next) 
     }
 
     // Calculate total amount from provided events
-    const totalAmount = events.reduce((sum: number, ev: any) => sum + (Number(ev.amount) || 0), 0);
+    const memberCount = (isGroup && groupMembers && groupMembers.length > 0) ? groupMembers.length : 1;
+    const totalAmount = events.reduce((sum: number, ev: any) => {
+      const amt = Number(ev.amount) || 0;
+      if (ev.isFlat) {
+        return sum + amt;
+      }
+      return sum + amt * memberCount;
+    }, 0);
 
     const registration = new EventRegistration({
       studentId: student._id,
@@ -82,7 +89,21 @@ router.put('/:id', verifyToken, requireSuperAdmin, async (req, res, next) => {
     // Use provided total or calculate from events if events are provided
     let totalAmount = providedTotal;
     if (events && !providedTotal) {
-      totalAmount = events.reduce((sum: number, ev: any) => sum + (Number(ev.amount) || 0), 0);
+      const existingRegistration = await EventRegistration.findById(req.params.id);
+      if (!existingRegistration) {
+        return res.status(404).json({ success: false, error: 'Registration not found' });
+      }
+      const isGrp = isGroup !== undefined ? isGroup : existingRegistration.isGroup;
+      const grpMembers = groupMembers !== undefined ? groupMembers : existingRegistration.groupMembers;
+      const memCount = (isGrp && grpMembers && grpMembers.length > 0) ? grpMembers.length : 1;
+
+      totalAmount = events.reduce((sum: number, ev: any) => {
+        const amt = Number(ev.amount) || 0;
+        if (ev.isFlat) {
+          return sum + amt;
+        }
+        return sum + amt * memCount;
+      }, 0);
     }
 
     const updateData: any = {};

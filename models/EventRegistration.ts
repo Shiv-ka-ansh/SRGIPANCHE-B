@@ -9,6 +9,7 @@ export interface IEventRegistration extends Document {
     eventName: string;
     amount: number;
     subEvent?: string;
+    isFlat?: boolean;
   }[];
   isGroup: boolean;
   groupMembers?: string[];
@@ -30,6 +31,7 @@ const EventRegistrationSchema: Schema = new Schema({
       eventName: { type: String, required: true },
       amount: { type: Number, required: true },
       subEvent: { type: String },
+      isFlat: { type: Boolean },
     },
   ],
   isGroup: { type: Boolean, default: false },
