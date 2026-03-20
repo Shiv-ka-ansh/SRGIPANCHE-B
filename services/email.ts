@@ -14,16 +14,25 @@ const createTransporter = () => {
     });
   }
 
+  const port = Number(process.env.EMAIL_PORT) || 465;
+  const isSecure = port === 465;
+
   // Default to SMTP
   return nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT) || 587,
-    secure: Number(process.env.EMAIL_PORT) === 465, // true for 465, false for other ports
+    port: port,
+    secure: isSecure,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-  });
+    tls: {
+      rejectUnauthorized: false, // sometimes needed for certain servers
+    },
+    // Force IPv4 because ENETUNREACH 2607:f8b0... was seen in logs
+    // (render instance may not have IPv6 route)
+    family: 4 
+  } as any);
 };
 
 export const sendRegistrationToken = async (
@@ -64,9 +73,10 @@ export const sendRegistrationToken = async (
 
   try {
     await transporter.sendMail(mailOptions);
+    return true;
   } catch (error) {
     console.error('Error sending email:', error);
-    // Non-blocking - swallow error but log it.
+    return false;
   }
 };
 

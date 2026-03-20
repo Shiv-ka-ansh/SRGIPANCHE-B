@@ -14,6 +14,7 @@ export interface IStudent extends Document {
   tokenUsed: boolean;
   registeredAt: Date;
   status: string;
+  emailSent: boolean;
 }
 
 const StudentSchema: Schema = new Schema({
@@ -30,6 +31,7 @@ const StudentSchema: Schema = new Schema({
   tokenUsed: { type: Boolean, default: false },
   registeredAt: { type: Date, default: Date.now },
   status: { type: String, enum: ['registered', 'processed'], default: 'registered' },
+  emailSent: { type: Boolean, default: false },
 });
 
 export default mongoose.model<IStudent>('Student', StudentSchema);

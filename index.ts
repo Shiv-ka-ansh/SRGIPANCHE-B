@@ -20,6 +20,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Correctly handle proxy headers (essential for Render/Heroku etc.)
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet());
 

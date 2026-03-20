@@ -44,14 +44,81 @@ router.post('/register', async (req, res, next) => {
 
     await student.save();
 
-    // Send email (non-blocking)
-    sendRegistrationToken(email, fullName, rollNo, course, branch, section, year, unhashedToken);
+    // Send email (non-blocking but updates status)
+    sendRegistrationToken(email, fullName, rollNo, course, branch, section, year, unhashedToken)
+      .then(async (success) => {
+        if (success) {
+          await Student.findByIdAndUpdate(student._id, { emailSent: true });
+        }
+      });
 
     res.status(201).json({
       success: true,
       token: unhashedToken,
       studentId: student._id,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/students/resend-failed (Admin only)
+router.post('/resend-failed', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const failedStudents = await Student.find({ emailSent: false });
+    
+    if (failedStudents.length === 0) {
+      return res.json({ success: true, message: 'No failed emails to resend' });
+    }
+
+    // Process in background to avoid timeout
+    failedStudents.forEach(async (student) => {
+      const success = await sendRegistrationToken(
+        student.email, 
+        student.fullName, 
+        student.rollNo, 
+        student.course, 
+        student.branch, 
+        student.section, 
+        student.year, 
+        student.token
+      );
+      if (success) {
+        await Student.findByIdAndUpdate(student._id, { emailSent: true });
+      }
+    });
+
+    res.json({ success: true, message: `Attempting to resend ${failedStudents.length} emails in background` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/students/:id/resend (Admin only)
+router.post('/:id/resend', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const student = await Student.findById(req.params.id);
+    if (!student) {
+      return res.status(404).json({ success: false, error: 'Student not found' });
+    }
+
+    const success = await sendRegistrationToken(
+      student.email, 
+      student.fullName, 
+      student.rollNo, 
+      student.course, 
+      student.branch, 
+      student.section, 
+      student.year, 
+      student.token
+    );
+
+    if (success) {
+      await Student.findByIdAndUpdate(student._id, { emailSent: true });
+      return res.json({ success: true, message: 'Email sent successfully' });
+    } else {
+      return res.status(500).json({ success: false, error: 'Failed to send email' });
+    }
   } catch (error) {
     next(error);
   }
