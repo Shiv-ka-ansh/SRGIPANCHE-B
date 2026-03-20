@@ -18,7 +18,7 @@ router.get('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
 // POST /api/users (SuperAdmin only)
 router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, allowedTabs } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Name, email, and password are required' });
@@ -39,6 +39,7 @@ router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
       email,
       passwordHash,
       role: userRole,
+      allowedTabs: allowedTabs || (userRole === 'superadmin' ? ['overview', 'students', 'events', 'registrations', 'schedule', 'users'] : ['students', 'registrations']),
     });
 
     await user.save();
@@ -50,6 +51,7 @@ router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        allowedTabs: user.allowedTabs,
       },
     });
   } catch (error) {

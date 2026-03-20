@@ -37,19 +37,6 @@ router.post('/', verifyToken, requireAdmin, async (req: AuthRequest, res, next) 
 
     await registration.save();
 
-    // Mark student as processed
-    student.tokenUsed = true;
-    student.status = 'processed';
-    await student.save();
-
-    // Mark all other participants as processed
-    if (participantIds && participantIds.length > 0) {
-      await Student.updateMany(
-        { _id: { $in: participantIds } },
-        { $set: { tokenUsed: true, status: 'processed' } }
-      );
-    }
-
     // Send email confirmation
     sendEventConfirmation(student.email, student.fullName, events, totalAmount)
       .then(() => {
@@ -90,14 +77,26 @@ router.get('/student/:studentId', verifyToken, requireAdmin, async (req, res, ne
 // PUT /api/event-registrations/:id (SuperAdmin only)
 router.put('/:id', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
-    const { events, isGroup, groupMembers } = req.body;
+    const { events, isGroup, groupMembers, studentName, rollNo, totalAmount: providedTotal, remark } = req.body;
     
-    // Calculate total amount from provided events
-    const totalAmount = events.reduce((sum: number, ev: any) => sum + (Number(ev.amount) || 0), 0);
+    // Use provided total or calculate from events if events are provided
+    let totalAmount = providedTotal;
+    if (events && !providedTotal) {
+      totalAmount = events.reduce((sum: number, ev: any) => sum + (Number(ev.amount) || 0), 0);
+    }
+
+    const updateData: any = {};
+    if (events) updateData.events = events;
+    if (isGroup !== undefined) updateData.isGroup = isGroup;
+    if (groupMembers) updateData.groupMembers = groupMembers;
+    if (studentName) updateData.studentName = studentName;
+    if (rollNo) updateData.rollNo = rollNo;
+    if (totalAmount !== undefined) updateData.totalAmount = totalAmount;
+    if (remark !== undefined) updateData.remark = remark;
 
     const registration = await EventRegistration.findByIdAndUpdate(
       req.params.id,
-      { events, totalAmount, isGroup, groupMembers },
+      updateData,
       { new: true, runValidators: true }
     );
 

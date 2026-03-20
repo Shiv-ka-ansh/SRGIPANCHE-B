@@ -17,6 +17,7 @@ export interface IEventRegistration extends Document {
   processedBy: mongoose.Types.ObjectId;
   processedAt: Date;
   emailSent: boolean;
+  remark?: string;
 }
 
 const EventRegistrationSchema: Schema = new Schema({
@@ -38,6 +39,7 @@ const EventRegistrationSchema: Schema = new Schema({
   processedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   processedAt: { type: Date, default: Date.now },
   emailSent: { type: Boolean, default: false },
+  remark: { type: String, default: '' },
 });
 
 export default mongoose.model<IEventRegistration>('EventRegistration', EventRegistrationSchema);
