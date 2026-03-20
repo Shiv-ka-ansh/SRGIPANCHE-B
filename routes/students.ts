@@ -65,12 +65,15 @@ router.post('/register', async (req, res, next) => {
 // POST /api/students/resend-failed (Admin only)
 router.post('/resend-failed', verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const failedStudents = await Student.find({ emailSent: false });
+    console.log('--- REQ: Bulk Resend Failed Emails');
+    const failedStudents = await Student.find({ emailSent: { $ne: true } });
     
     if (failedStudents.length === 0) {
+      console.log('--- RES: No failed students found');
       return res.json({ success: true, message: 'No failed emails to resend' });
     }
 
+    console.log(`--- INFO: Resending ${failedStudents.length} emails in background...`);
     // Process in background to avoid timeout
     failedStudents.forEach(async (student) => {
       const success = await sendRegistrationToken(
@@ -85,6 +88,9 @@ router.post('/resend-failed', verifyToken, requireAdmin, async (req, res, next) 
       );
       if (success) {
         await Student.findByIdAndUpdate(student._id, { emailSent: true });
+        console.log(`--- SUCCESS: Resent to ${student.email}`);
+      } else {
+        console.log(`--- FAILED: Still failing for ${student.email}`);
       }
     });
 
@@ -97,8 +103,10 @@ router.post('/resend-failed', verifyToken, requireAdmin, async (req, res, next) 
 // POST /api/students/:id/resend (Admin only)
 router.post('/:id/resend', verifyToken, requireAdmin, async (req, res, next) => {
   try {
+    console.log('--- REQ: Individual Resend for Student ID:', req.params.id);
     const student = await Student.findById(req.params.id);
     if (!student) {
+      console.log('--- ERR: Student not found for individual resend');
       return res.status(404).json({ success: false, error: 'Student not found' });
     }
 
@@ -115,8 +123,10 @@ router.post('/:id/resend', verifyToken, requireAdmin, async (req, res, next) => 
 
     if (success) {
       await Student.findByIdAndUpdate(student._id, { emailSent: true });
+      console.log('--- SUCCESS: Individual Resend successful');
       return res.json({ success: true, message: 'Email sent successfully' });
     } else {
+      console.log('--- ERR: Individual Resend failed');
       return res.status(500).json({ success: false, error: 'Failed to send email' });
     }
   } catch (error) {
