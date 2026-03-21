@@ -11,7 +11,7 @@ const EVENT_CATEGORIES: any = {
     events: [
       { 
         name: 'TREASURE SAFARI', 
-        amount: 50, 
+        amount: 70, 
         isTeam: true,
         description: 'Get ready for an adventure filled with mystery, excitement, and teamwork! Treasure Safari is a thrilling treasure hunt where participants race against time to decode clues and reach the final destination.',
         rules: [
@@ -19,6 +19,21 @@ const EVENT_CATEGORIES: any = {
           'A series of clues and puzzles will be provided at each stage.',
           'Each clue leads to the next checkpoint, testing logic and coordination.',
           'The team that successfully solves all clues and reaches the end first emerges as the winner.'
+        ]
+      },
+      { 
+        name: 'THE PERFECT CLICK', 
+        amount: 50, 
+        description: 'Showcase your photography skills in the Perfect Click Event! This exciting competition is all about capturing the perfect shot that tells a story.' 
+      },
+      { 
+        name: 'NAIL ART', 
+        amount: 50, 
+        description: 'Unleash your creativity and showcase your artistic flair with Nail Art! This event is all about transforming nails into stunning works of art using unique designs and techniques.',
+        rules: [
+          'Participants will create creative and innovative nail designs.',
+          'Focus on creativity, precision, and overall presentation.',
+          'Judging will be based on originality, detailing, and aesthetic appeal.'
         ]
       },
       { 
@@ -32,14 +47,9 @@ const EVENT_CATEGORIES: any = {
         ]
       },
       { 
-        name: 'NAIL ART', 
+        name: 'SELFIE MANIAC', 
         amount: 50, 
-        description: 'Unleash your creativity and showcase your artistic flair with Nail Art! This event is all about transforming nails into stunning works of art using unique designs and techniques.',
-        rules: [
-          'Participants will create creative and innovative nail designs.',
-          'Focus on creativity, precision, and overall presentation.',
-          'Judging will be based on originality, detailing, and aesthetic appeal.'
-        ]
+        description: 'Unleash your inner selfie star in the Selfie Maniac Event! This fun-filled competition is all about confidence, creativity, and capturing your best self in the most unique way possible.' 
       },
       { 
         name: 'ATTIRE', 
@@ -53,7 +63,7 @@ const EVENT_CATEGORIES: any = {
       },
       { 
         name: 'SANYOG SE', 
-        amount: 25, 
+        amount: 40, 
         description: 'What if luck is all you need to win? Sanyog Se is an exciting luck-based event where every draw brings a new surprise and endless anticipation.',
         rules: [
           'Participants will take part in a random lucky draw.',
@@ -72,6 +82,30 @@ const EVENT_CATEGORIES: any = {
         ]
       },
       { 
+        name: 'THE SLOGANEER', 
+        amount: 50, 
+        description: 'Unleash the power of words in Sloganeer, where creativity meets impact! This event challenges participants to craft short, catchy, and meaningful slogans.' 
+      },
+      { 
+        name: 'ISTEHAAAR', 
+        amount: 50, 
+        description: 'Turn your ideas into impactful visuals! Istehaaar is a poster-making event where creativity meets expression, allowing participants to convey powerful messages through art.',
+        rules: [
+          'Participants will design posters based on the given theme.',
+          'Focus on creativity, clarity of message, and visual appeal.',
+          'Judging will be based on originality, design, and presentation.'
+        ]
+      },
+      { 
+        name: 'ESPRIT DE CORPS', 
+        amount: 50, 
+        isTeam: true,
+        description: 'Step into the spirit of teamwork with Esprit De Corps, an event that celebrates unity, coordination, and collective strength.',
+        rules: [
+          'This event will test your communication, trust, leadership, and team synergy in exciting and competitive tasks.'
+        ]
+      },
+      { 
         name: 'CROSSWORD', 
         amount: 50, 
         description: 'Put your vocabulary and thinking skills to the test! Crossword is a fun and engaging word puzzle event that challenges your knowledge and presence of mind.',
@@ -79,16 +113,6 @@ const EVENT_CATEGORIES: any = {
           'Participants will solve a crossword puzzle within a given time.',
           'Focus on vocabulary, logical thinking, and speed.',
           'Judging will be based on accuracy and completion time.'
-        ]
-      },
-      { 
-        name: 'ISHTEHAR', 
-        amount: 50, 
-        description: 'Turn your ideas into impactful visuals! Ishtehar is a poster-making event where creativity meets expression, allowing participants to convey powerful messages through art.',
-        rules: [
-          'Participants will design posters based on the given theme.',
-          'Focus on creativity, clarity of message, and visual appeal.',
-          'Judging will be based on originality, design, and presentation.'
         ]
       },
       { 
@@ -101,16 +125,8 @@ const EVENT_CATEGORIES: any = {
           'Judging will be based on originality, precision, and overall impact.'
         ]
       },
-      { 
-        name: 'RANGOLI', 
-        amount: 50, 
-        description: 'Not just colors, it’s a whole vibe! Rangoli is where creativity meets tradition, and the ground becomes your canvas to create something truly eye-catching.',
-        rules: [
-          'Participants will design vibrant rangoli based on the given theme.',
-          'Show your creativity, symmetry, and color game.',
-          'Judging will be based on originality, detailing, and overall impact.'
-        ]
-      },
+      { name: 'LITERARY', amount: 50, description: 'Showcase your prowess with words in this literature-focused event.' },
+      { name: 'FINE ARTS', amount: 50, description: 'A competition to celebrate mastery over traditional and contemporary fine arts.' },
       { 
         name: 'ARM WRESTLING', 
         amount: 50, 
@@ -122,29 +138,16 @@ const EVENT_CATEGORIES: any = {
         ]
       },
       { 
-        name: 'SELFIE MANIAC', 
+        name: 'RANGOLI', 
         amount: 50, 
-        description: 'Unleash your inner selfie star in the Selfie Maniac Event! This fun-filled competition is all about confidence, creativity, and capturing your best self in the most unique way possible.' 
-      },
-      { 
-        name: 'ESPRIT DE CORPS', 
-        amount: 50, 
-        isTeam: true,
-        description: 'Step into the spirit of teamwork with Esprit De Corps, an event that celebrates unity, coordination, and collective strength.',
+        description: 'Not just colors, it’s a whole vibe! Rangoli is where creativity meets tradition, and the ground becomes your canvas to create something truly eye-catching.',
         rules: [
-          'This event will test your communication, trust, leadership, and team synergy in exciting and competitive tasks.'
+          'Participants will design vibrant rangoli based on the given theme.',
+          'Show your creativity, symmetry, and color game.',
+          'Judging will be based on originality, detailing, and overall impact.'
         ]
       },
-      { 
-        name: 'THE SLOGANEER', 
-        amount: 50, 
-        description: 'Unleash the power of words in Sloganeer, where creativity meets impact! This event challenges participants to craft short, catchy, and meaningful slogans.' 
-      },
-      { 
-        name: 'THE PERFECT CLICK', 
-        amount: 50, 
-        description: 'Showcase your photography skills in the Perfect Click Event! This exciting competition is all about capturing the perfect shot that tells a story.' 
-      },
+      { name: 'MEHENDI', amount: 50, description: 'Display your creativity and precision with intricate Mehendi designs.' }
     ]
   },
   technical: {
@@ -167,26 +170,27 @@ const EVENT_CATEGORIES: any = {
     events: [
       { name: 'PERSONA', amount: 100 },
       { name: 'SUR SPARDHA', amount: 50 },
-      { name: 'TANZ & TWIST (Solo)', amount: 150 },
-      { name: 'TANZ & TWIST (Group)', amount: 500 },
+      { name: 'TANZ & TWIST', amount: 150 },
+      { name: 'TANZ & TWIST (GROUP)', amount: 500 },
       { name: 'NUKKAD NATAK', amount: 500 },
       { name: 'STAND-UP COMEDY', amount: 50 },
       { name: 'DRAMATICS', amount: 50 },
+      { name: 'PANACHE GOT TALENT', amount: 50 },
     ]
   },
   cyber: {
     label: 'Cyber',
     color: '#FF6B00',
     events: [
+      {
+        name: 'ONLINE GAMING',
+        amount: 60,
+        subEvents: ['BGMI', 'Free Fire', 'Mini Militia', '8 Ball Pool', 'RC24', 'FIFA/E-Football', 'Tekken 3']
+      },
       { name: 'CODE DEBUGGER', amount: 50 },
       { name: 'BLIND VIEWER', amount: 50 },
       { name: 'BATTLE WITH BYTE', amount: 50 },
-      { name: 'GUESS THE TECH', amount: 50 },
-      {
-        name: 'ONLINE GAMING',
-        amount: 50,
-        subEvents: ['BGMI', 'Free Fire', 'Mini Militia', '8 Ball Pool', 'RC24', 'FIFA/E-Football', 'Tekken 3']
-      },
+      { name: 'GUESS THE TECH', amount: 50 }
     ]
   }
 };
