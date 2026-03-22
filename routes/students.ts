@@ -9,8 +9,8 @@ const router = Router();
 // POST /api/students/register
 router.post('/register', async (req, res, next) => {
   try {
-    const { fullName, rollNo, course, section, year, mobileNo, email } = req.body;
-    const branch = req.body.branch?.toUpperCase().trim();
+    const { fullName, rollNo, course, year, mobileNo, email } = req.body;
+    const {branch, section} = req.body.branch?.toUpperCase().trim();
 
     // Basic validation
     if (!fullName || !rollNo || !course || !branch || !section || !year || !mobileNo || !email) {
