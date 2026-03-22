@@ -1,8 +1,45 @@
-import sgMail from "@sendgrid/mail";
+import nodemailer from "nodemailer";
+import { google } from "googleapis";
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY as string);
+const OAuth2 = google.auth.OAuth2;
 
-const FROM_EMAIL = "srgipanache2k26@gmail.com";
+const createTransporter = async () => {
+  const oauth2Client = new OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    "https://developers.google.com/oauthplayground"
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+  });
+
+  const accessToken = await new Promise((resolve, reject) => {
+    oauth2Client.getAccessToken((err, token) => {
+      if (err) {
+        console.error("Failed to create access token :(", err);
+        reject("Failed to create access token :(");
+      }
+      resolve(token);
+    });
+  });
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      type: "OAuth2",
+      user: process.env.GMAIL_USER,
+      accessToken,
+      clientId: process.env.GMAIL_CLIENT_ID,
+      clientSecret: process.env.GMAIL_CLIENT_SECRET,
+      refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+    },
+  } as any);
+
+  return transporter;
+};
+
+const FROM_EMAIL = process.env.GMAIL_USER;
 const FROM_NAME = "PANACHE 2K26";
 
 export const sendRegistrationToken = async (
@@ -15,15 +52,14 @@ export const sendRegistrationToken = async (
   year: string,
   token: string,
 ) => {
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: "PANACHE 2K26 - Registration Confirmed",
-    text: `Hi ${name}, You are registered for PANACHE 2K26. Your token is: ${token}. Roll No: ${rollNo}, Course: ${course}, Branch: ${branch}, Section: ${section}, Year: ${year}. Present this token at the admin desk at the event.`,
-    html: `
+  try {
+    const transporter = await createTransporter();
+    const mailOptions = {
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject: "PANACHE 2K26 - Registration Confirmed",
+      text: `Hi ${name}, You are registered for PANACHE 2K26. Your token is: ${token}. Roll No: ${rollNo}, Course: ${course}, Branch: ${branch}, Section: ${section}, Year: ${year}. Present this token at the admin desk at the event.`,
+      html: `
       <h2>Hi ${name},</h2>
       <p>You are officially registered for PANACHE 2K26!</p>
       
@@ -41,16 +77,13 @@ export const sendRegistrationToken = async (
       <p>Present this token to the admin desk at the event to register for individual competitions.</p>
       <p>See you at PANACHE 2K26!</p>
     `,
-  };
+    };
 
-  try {
-    await sgMail.send(msg);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`--- SUCCESS: Email sent to ${email}. Message ID: ${info.messageId}`);
     return true;
   } catch (error) {
-    console.error("Error sending registration email via SendGrid:", error);
-    if ((error as any).response) {
-      console.error((error as any).response.body);
-    }
+    console.error(`--- ERROR: Failed to send registration email to ${email}:`, error);
     return false;
   }
 };
@@ -88,15 +121,14 @@ export const sendEventConfirmation = async (
     eventsHtml += `</ul></div>`;
   }
 
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: "PANACHE 2K26 - Your Event Registrations",
-    text: `Hi ${name}, Here are the events you have been registered for:\n${eventsText}\nTotal Amount: Rs.${totalAmount}\nPlease keep this email as your registration receipt. Best of luck!`,
-    html: `
+  try {
+    const transporter = await createTransporter();
+    const mailOptions = {
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject: "PANACHE 2K26 - Your Event Registrations",
+      text: `Hi ${name}, Here are the events you have been registered for:\n${eventsText}\nTotal Amount: Rs.${totalAmount}\nPlease keep this email as your registration receipt. Best of luck!`,
+      html: `
       <h2>Hi ${name},</h2>
       <p>Here are the events you have been registered for:</p>
       
@@ -109,16 +141,13 @@ export const sendEventConfirmation = async (
       <p>Please keep this email as your registration receipt.</p>
       <p>Best of luck!</p>
     `,
-  };
+    };
 
-  try {
-    await sgMail.send(msg);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`--- SUCCESS: Event confirmation email sent to ${email}. Message ID: ${info.messageId}`);
     return true;
   } catch (error) {
-    console.error("Error sending confirmation email via SendGrid:", error);
-    if ((error as any).response) {
-      console.error((error as any).response.body);
-    }
+    console.error(`--- ERROR: Failed to send event confirmation email to ${email}:`, error);
     return false;
   }
 };
