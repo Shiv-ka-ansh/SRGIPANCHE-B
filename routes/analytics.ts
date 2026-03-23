@@ -9,7 +9,15 @@ const router = Router();
 router.get('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
   try {
     const totalStudents = await Student.countDocuments();
-    const processedStudents = await Student.countDocuments({ status: 'processed' });
+    
+    // Processed students are those who have at least one registration
+    const registeredStudentIds = await EventRegistration.distinct('studentId');
+    const participantIds = await EventRegistration.distinct('participantIds');
+    const allUniqueRegisteredIds = new Set([
+      ...registeredStudentIds.filter(Boolean).map(id => id.toString()),
+      ...participantIds.filter(Boolean).map(id => id.toString())
+    ]);
+    const processedStudents = allUniqueRegisteredIds.size;
     
     const registrations = await EventRegistration.find().lean();
     

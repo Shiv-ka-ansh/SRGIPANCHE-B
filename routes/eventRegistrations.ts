@@ -20,6 +20,24 @@ router.post('/', verifyToken, requireAdmin, async (req: AuthRequest, res, next) 
       return res.status(404).json({ success: false, error: 'Student not found' });
     }
 
+    // DUPLICATE CHECK: Find all existing registrations for this student
+    const existingRegs = await EventRegistration.find({ studentId: student._id });
+    const existingEventsSet = new Set(
+      existingRegs.flatMap(r => r.events.map(e => `${e.eventName}|${e.subEvent || ''}`))
+    );
+
+    const duplicates = events.filter((e: any) => 
+      existingEventsSet.has(`${e.eventName}|${e.subEvent || ''}`)
+    );
+
+    if (duplicates.length > 0) {
+      const names = duplicates.map((d: any) => d.eventName).join(', ');
+      return res.status(400).json({ 
+        success: false, 
+        error: `Student is already registered for: ${names}` 
+      });
+    }
+
     // Calculate total amount from provided events
     const memberCount = (isGroup && groupMembers && groupMembers.length > 0) ? groupMembers.length : 1;
     const totalAmount = events.reduce((sum: number, ev: any) => {
@@ -43,6 +61,17 @@ router.post('/', verifyToken, requireAdmin, async (req: AuthRequest, res, next) 
     });
 
     await registration.save();
+    
+    // Update main student status to processed
+    await Student.findByIdAndUpdate(studentId, { status: 'processed' });
+
+    // Update participants status to processed if it's a group registration
+    if (isGroup && participantIds && participantIds.length > 0) {
+      await Student.updateMany(
+        { _id: { $in: participantIds } },
+        { status: 'processed' }
+      );
+    }
 
     // Send email confirmation
     sendEventConfirmation(student.email, student.fullName, events, totalAmount)
@@ -126,6 +155,52 @@ router.put('/:id', verifyToken, requireSuperAdmin, async (req, res, next) => {
     }
 
     res.json({ success: true, registration });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/event-registrations/:id (Admin required)
+router.delete('/:id', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    console.log(`--- REQ: Delete Registration ID: ${req.params.id}`);
+    const registration = await EventRegistration.findByIdAndDelete(req.params.id);
+    if (!registration) {
+      return res.status(404).json({ success: false, error: 'Registration not found' });
+    }
+    res.json({ success: true, message: 'Registration deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/event-registrations/:id/resend (SuperAdmin required)
+router.post('/:id/resend', verifyToken, requireSuperAdmin, async (req, res, next) => {
+  try {
+    const registration = await EventRegistration.findById(req.params.id);
+    if (!registration) {
+      return res.status(404).json({ success: false, error: 'Registration not found' });
+    }
+
+    const student = await Student.findById(registration.studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, error: 'Student not found' });
+    }
+
+    const success = await sendEventConfirmation(
+      student.email,
+      student.fullName,
+      registration.events,
+      registration.totalAmount
+    );
+
+    if (success) {
+      registration.emailSent = true;
+      await registration.save();
+      return res.json({ success: true, message: 'Email resent successfully' });
+    } else {
+      return res.status(500).json({ success: false, error: 'Failed to send email' });
+    }
   } catch (error) {
     next(error);
   }

@@ -1,29 +1,49 @@
-import { Router } from 'express';
-import Student from '../models/Student';
-import { generate6DigitToken, hashToken } from '../services/tokenService';
-import { sendRegistrationToken } from '../services/email';
-import { verifyToken, requireAdmin } from '../middleware/auth';
+import { Router } from "express";
+import Student from "../models/Student";
+import EventRegistration from "../models/EventRegistration";
+import { generate6DigitToken, hashToken } from "../services/tokenService";
+import { sendRegistrationToken } from "../services/email";
+import { verifyToken, requireAdmin } from "../middleware/auth";
 
 const router = Router();
 
 // POST /api/students/register
-router.post('/register', async (req, res, next) => {
+router.post("/register", async (req, res, next) => {
   try {
-    const { fullName, rollNo, course, year, mobileNo, email } = req.body;
-    const {branch, section} = req.body.branch?.toUpperCase().trim();
+    const { fullName, rollNo, course, branch, section, year, mobileNo, email } = req.body;
 
     // Basic validation
-    if (!fullName || !rollNo || !course || !branch || !section || !year || !mobileNo || !email) {
-      return res.status(400).json({ success: false, error: 'All fields are required' });
+    if (
+      !fullName ||
+      !rollNo ||
+      !course ||
+      !branch ||
+      !section ||
+      !year ||
+      !mobileNo ||
+      !email
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: "All fields are required" });
     }
 
-    // Check if email or rollNo already exists
     const existingStudent = await Student.findOne({
       $or: [{ email: email.toLowerCase() }, { rollNo: rollNo.toUpperCase() }],
     });
 
     if (existingStudent) {
-      return res.status(400).json({ success: false, error: 'Student with this email or roll number already registered' });
+      const registrations = await EventRegistration.find({
+        studentId: existingStudent._id,
+      });
+      return res.status(200).json({
+        success: true,
+        message: "Student already registered",
+        token: existingStudent.token,
+        studentId: existingStudent._id,
+        alreadyExisted: true,
+        registrations,
+      });
     }
 
     const unhashedToken = generate6DigitToken();
@@ -45,12 +65,20 @@ router.post('/register', async (req, res, next) => {
     await student.save();
 
     // Send email (non-blocking but updates status)
-    sendRegistrationToken(email, fullName, rollNo, course, branch, section, year, unhashedToken)
-      .then(async (success) => {
-        if (success) {
-          await Student.findByIdAndUpdate(student._id, { emailSent: true });
-        }
-      });
+    sendRegistrationToken(
+      email,
+      fullName,
+      rollNo,
+      course,
+      branch,
+      section,
+      year,
+      unhashedToken,
+    ).then(async (success) => {
+      if (success) {
+        await Student.findByIdAndUpdate(student._id, { emailSent: true });
+      }
+    });
 
     res.status(201).json({
       success: true,
@@ -63,105 +91,138 @@ router.post('/register', async (req, res, next) => {
 });
 
 // POST /api/students/resend-failed (Admin only)
-router.post('/resend-failed', verifyToken, requireAdmin, async (req, res, next) => {
-  try {
-    console.log('--- REQ: Bulk Resend Failed Emails');
-    const failedStudents = await Student.find({ emailSent: { $ne: true } });
-    
-    if (failedStudents.length === 0) {
-      console.log('--- RES: No failed students found');
-      return res.json({ success: true, message: 'No failed emails to resend' });
-    }
+router.post(
+  "/resend-failed",
+  verifyToken,
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      console.log("--- REQ: Bulk Resend Failed Emails");
+      const failedStudents = await Student.find({ emailSent: { $ne: true } });
 
-    console.log(`--- INFO: Resending ${failedStudents.length} emails in background...`);
-    // Process in background to avoid timeout
-    failedStudents.forEach(async (student) => {
-      const success = await sendRegistrationToken(
-        student.email, 
-        student.fullName, 
-        student.rollNo, 
-        student.course, 
-        student.branch, 
-        student.section, 
-        student.year, 
-        student.token
-      );
-      if (success) {
-        await Student.findByIdAndUpdate(student._id, { emailSent: true });
-        console.log(`--- SUCCESS: Resent to ${student.email}`);
-      } else {
-        console.log(`--- FAILED: Still failing for ${student.email}`);
+      if (failedStudents.length === 0) {
+        console.log("--- RES: No failed students found");
+        return res.json({
+          success: true,
+          message: "No failed emails to resend",
+        });
       }
-    });
 
-    res.json({ success: true, message: `Attempting to resend ${failedStudents.length} emails in background` });
-  } catch (error) {
-    next(error);
-  }
-});
+      console.log(
+        `--- INFO: Resending ${failedStudents.length} emails in background...`,
+      );
+      // Process in background to avoid timeout
+      failedStudents.forEach(async (student) => {
+        const success = await sendRegistrationToken(
+          student.email,
+          student.fullName,
+          student.rollNo,
+          student.course,
+          student.branch,
+          student.section,
+          student.year,
+          student.token,
+        );
+        if (success) {
+          await Student.findByIdAndUpdate(student._id, { emailSent: true });
+          console.log(`--- SUCCESS: Resent to ${student.email}`);
+        } else {
+          console.log(`--- FAILED: Still failing for ${student.email}`);
+        }
+      });
+
+      res.json({
+        success: true,
+        message: `Attempting to resend ${failedStudents.length} emails in background`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // POST /api/students/:id/resend (Admin only)
-router.post('/:id/resend', verifyToken, requireAdmin, async (req, res, next) => {
-  try {
-    console.log('--- REQ: Individual Resend for Student ID:', req.params.id);
-    const student = await Student.findById(req.params.id);
-    if (!student) {
-      console.log('--- ERR: Student not found for individual resend');
-      return res.status(404).json({ success: false, error: 'Student not found' });
-    }
+router.post(
+  "/:id/resend",
+  verifyToken,
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      console.log("--- REQ: Individual Resend for Student ID:", req.params.id);
+      const student = await Student.findById(req.params.id);
+      if (!student) {
+        console.log("--- ERR: Student not found for individual resend");
+        return res
+          .status(404)
+          .json({ success: false, error: "Student not found" });
+      }
 
-    const success = await sendRegistrationToken(
-      student.email, 
-      student.fullName, 
-      student.rollNo, 
-      student.course, 
-      student.branch, 
-      student.section, 
-      student.year, 
-      student.token
-    );
+      const success = await sendRegistrationToken(
+        student.email,
+        student.fullName,
+        student.rollNo,
+        student.course,
+        student.branch,
+        student.section,
+        student.year,
+        student.token,
+      );
 
-    if (success) {
-      await Student.findByIdAndUpdate(student._id, { emailSent: true });
-      console.log('--- SUCCESS: Individual Resend successful');
-      return res.json({ success: true, message: 'Email sent successfully' });
-    } else {
-      console.log('--- ERR: Individual Resend failed');
-      return res.status(500).json({ success: false, error: 'Failed to send email' });
+      if (success) {
+        await Student.findByIdAndUpdate(student._id, { emailSent: true });
+        console.log("--- SUCCESS: Individual Resend successful");
+        return res.json({ success: true, message: "Email sent successfully" });
+      } else {
+        console.log("--- ERR: Individual Resend failed");
+        return res
+          .status(500)
+          .json({ success: false, error: "Failed to send email" });
+      }
+    } catch (error) {
+      next(error);
     }
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 // POST /api/students/verify-token (Admin only)
-router.post('/verify-token', verifyToken, requireAdmin, async (req, res, next) => {
-  try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ success: false, error: 'Token is required' });
-    }
+router.post(
+  "/verify-token",
+  verifyToken,
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Token is required" });
+      }
 
-    // Find student by plain token
-    const student = await Student.findOne({ token });
-    if (!student) {
-      return res.status(404).json({ success: false, error: 'Invalid or incorrect token' });
-    }
+      // Find student by plain token
+      const student = await Student.findOne({ token });
+      if (!student) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Invalid or incorrect token" });
+      }
 
-    res.json({ success: true, student });
-  } catch (error) {
-    next(error);
-  }
-});
+      const registrations = await EventRegistration.find({ studentId: student._id });
+
+      res.json({ success: true, student, registrations });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // GET /api/students (Admin/SuperAdmin)
-router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
+router.get("/", verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const { search, branch } = req.query;
     let query: any = {};
 
     if (search) {
-      const searchRegex = new RegExp(search as string, 'i');
+      const searchRegex = new RegExp(search as string, "i");
       query.$or = [
         { fullName: searchRegex },
         { rollNo: searchRegex },
@@ -169,7 +230,7 @@ router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
       ];
     }
 
-    if (branch && branch !== 'All') {
+    if (branch && branch !== "All") {
       query.branch = branch;
     }
 
@@ -181,11 +242,13 @@ router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
 });
 
 // GET /api/students/:id (Admin/SuperAdmin)
-router.get('/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.get("/:id", verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) {
-      return res.status(404).json({ success: false, error: 'Student not found' });
+      return res
+        .status(404)
+        .json({ success: false, error: "Student not found" });
     }
     res.json({ success: true, student });
   } catch (error) {
@@ -194,18 +257,39 @@ router.get('/:id', verifyToken, requireAdmin, async (req, res, next) => {
 });
 
 // PUT /api/students/:id (Admin/SuperAdmin)
-router.put('/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.put("/:id", verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const { fullName, rollNo, course, branch, section, year, mobileNo, email } = req.body;
+    const { fullName, rollNo, course, branch, section, year, mobileNo, email } =
+      req.body;
     const student = await Student.findByIdAndUpdate(
       req.params.id,
       { fullName, rollNo, course, branch, section, year, mobileNo, email },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
     if (!student) {
-      return res.status(404).json({ success: false, error: 'Student not found' });
+      return res
+        .status(404)
+        .json({ success: false, error: "Student not found" });
     }
     res.json({ success: true, student });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/students/:id (SuperAdmin only)
+router.delete("/:id", verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const student = await Student.findByIdAndDelete(req.params.id);
+    if (!student) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Student not found" });
+    }
+    // Also delete their registrations
+    await EventRegistration.deleteMany({ studentId: req.params.id });
+    
+    res.json({ success: true, message: "Student and their registrations deleted successfully" });
   } catch (error) {
     next(error);
   }

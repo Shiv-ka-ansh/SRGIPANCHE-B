@@ -82,8 +82,8 @@ export const sendRegistrationToken = async (
 
     const raw = encodeEmail(
       email,
-      `"PANACHE 2K26" <${process.env.GMAIL_USER}>`,
-      "PANACHE 2K26 - Registration Confirmed",
+      `"🎉PANACHE 2K26" <${process.env.GMAIL_USER}>`,
+      "🎉PANACHE 2K26 - Registration Confirmed",
       html,
       text,
     );
