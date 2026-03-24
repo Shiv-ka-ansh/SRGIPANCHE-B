@@ -57,7 +57,6 @@ router.get('/csv', verifyToken, requireSuperAdmin, async (req, res, next) => {
         Categories: categoriesStr,
         Events: eventsStr,
         'Total Amount': r.totalAmount,
-        'Processed By': r.processedBy?.name || 'N/A',
         Date: r.processedAt ? new Date(r.processedAt).toISOString().split('T')[0] : '',
       };
     });
@@ -103,7 +102,6 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
       { header: 'Categories', key: 'categories', width: 15 },
       { header: 'Events', key: 'events', width: 30 },
       { header: 'Total Amount', key: 'amount', width: 15 },
-      { header: 'Processed By', key: 'processedBy', width: 15 },
       { header: 'Date', key: 'date', width: 15 },
     ];
 
@@ -124,7 +122,6 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
         categories: categoriesStr,
         events: eventsStr,
         amount: r.totalAmount,
-        processedBy: r.processedBy?.name || 'N/A',
         date: r.processedAt ? new Date(r.processedAt).toISOString().split('T')[0] : '',
       });
 
@@ -180,7 +177,6 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
           mobile: student.mobileNo || 'N/A',
           email: student.email || 'N/A',
           type: reg.isGroup ? 'GROUP' : 'SINGLE',
-          processedBy: (reg.processedBy as any)?.name || 'N/A',
           registeredAt: reg.processedAt ? new Date(reg.processedAt).toLocaleDateString('en-IN') : 'N/A',
           subEvent: ev.subEvent || '-',
         });
@@ -229,7 +225,6 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
         { key: 'email', width: 28 },
         { key: 'type', width: 10 },
         { key: 'subEvent', width: 16 },
-        { key: 'processedBy', width: 16 },
         { key: 'date', width: 14 },
       ];
 
@@ -243,7 +238,7 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
         headerRow.getCell(1).style = eventHeaderStyle;
 
         // Column Headers
-        const colRow = sheet.addRow(['#', 'Name', 'Roll No', 'Branch', 'Year', 'Mobile', 'Email', 'Type', 'Sub Event', 'Processed By', 'Date']);
+        const colRow = sheet.addRow(['#', 'Name', 'Roll No', 'Branch', 'Year', 'Mobile', 'Email', 'Type', 'Sub Event', 'Date']);
         colRow.height = 18;
         colRow.eachCell(cell => { cell.style = columnHeaderStyle; });
 
@@ -263,7 +258,6 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
               p.email,
               p.type,
               p.subEvent,
-              p.processedBy,
               p.registeredAt,
             ]);
             row.eachCell(cell => {
@@ -288,7 +282,7 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
       const lines = [];
       for (const ev of sortedEvents) {
         lines.push(`\n"EVENT: ${ev.eventName}","Category: ${ev.category}","Amount: Rs${ev.amount}","Registered: ${ev.participants.length}"`);
-        lines.push('"#","Name","Roll No","Branch","Year","Mobile","Email","Type","Sub Event","Processed By","Date"');
+        lines.push('"#","Name","Roll No","Branch","Year","Mobile","Email","Type","Sub Event","Date"');
         if (ev.participants.length === 0) {
           lines.push('"-","No registrations yet"');
         } else {
@@ -303,7 +297,6 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
               `"${p.email}"`,
               p.type,
               `"${p.subEvent}"`,
-              `"${p.processedBy}"`,
               `"${p.registeredAt}"`,
             ].join(','));
           });

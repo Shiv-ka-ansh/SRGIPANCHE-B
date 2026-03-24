@@ -234,8 +234,29 @@ router.get("/", verifyToken, requireAdmin, async (req, res, next) => {
       query.branch = branch;
     }
 
-    const students = await Student.find(query).sort({ registeredAt: -1 });
-    res.json({ success: true, students });
+    const students = await Student.find(query).sort({ registeredAt: -1 }).lean();
+
+    // Fetch all registrations for these students to display in the Admin table
+    const studentIds = students.map(s => s._id);
+    const registrations = await EventRegistration.find({ studentId: { $in: studentIds } }).lean();
+    
+    // Group event objects by student ID
+    const registrationsByStudent = registrations.reduce((acc, reg) => {
+      const sid = reg.studentId.toString();
+      if (!acc[sid]) acc[sid] = [];
+      // Combine all events across multiple registrations if they exist
+      if (reg.events && Array.isArray(reg.events)) {
+        acc[sid].push(...reg.events);
+      }
+      return acc;
+    }, {} as any);
+
+    const studentsWithRegs = students.map(s => ({
+      ...s,
+      registrations: registrationsByStudent[s._id.toString()] || []
+    }));
+
+    res.json({ success: true, students: studentsWithRegs });
   } catch (error) {
     next(error);
   }

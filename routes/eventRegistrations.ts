@@ -92,8 +92,44 @@ router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const registrations = await EventRegistration.find()
       .populate('processedBy', 'name email')
-      .sort({ processedAt: -1 });
-    res.json({ success: true, registrations });
+      .sort({ processedAt: -1 })
+      .lean();
+      
+    // Manually fetch and map Student data to avoid mongoose populate quirks
+    const studentIds = [...new Set(registrations.map(r => r.studentId.toString()))];
+    const students = await Student.find({ _id: { $in: studentIds } })
+      .select('token mobileNo branch')
+      .lean();
+      
+    // Create a dictionary for quick lookup
+    const studentMap = students.reduce((acc, student) => {
+      acc[student._id.toString()] = student;
+      return acc;
+    }, {} as any);
+
+    console.log(`--- GET /event-registrations: Found ${registrations.length} registrations, ${students.length} students`);
+
+    // Map the fields to the registrations
+    const mappedRegistrations = registrations.map(reg => {
+      const r = { ...reg } as any; // Create a new object to avoid mutation issues with lean()
+      const sid = r.studentId?.toString();
+      if (sid && studentMap[sid]) {
+        const student = studentMap[sid];
+        r.token = student.token;
+        r.mobileNo = student.mobileNo;
+        r.branch = student.branch;
+      } else {
+        console.log(`--- WARN: No student found for studentId=${sid}`);
+      }
+      return r;
+    });
+
+    if (mappedRegistrations.length > 0) {
+      const sample = mappedRegistrations[0];
+      console.log(`--- Sample mapped registration: token=${sample.token}, mobileNo=${sample.mobileNo}, branch=${sample.branch}`);
+    }
+
+    res.json({ success: true, registrations: mappedRegistrations });
   } catch (error) {
     next(error);
   }
