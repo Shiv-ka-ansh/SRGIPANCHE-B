@@ -11,7 +11,7 @@ const EVENT_CATEGORIES: any = {
     events: [
       { 
         name: 'TREASURE SAFARI', 
-        amount: 70, 
+        amount: 50, 
         isTeam: true,
         description: 'Get ready for an adventure filled with mystery, excitement, and teamwork! Treasure Safari is a thrilling treasure hunt where participants race against time to decode clues and reach the final destination.',
         rules: [
