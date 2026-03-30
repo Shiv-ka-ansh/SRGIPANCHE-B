@@ -6,10 +6,7 @@ import { verifyToken, requireSuperAdmin } from '../middleware/auth';
 
 const router = Router();
 
-/**
- * Build a MongoDB filter from export query params.
- * Supported params: category, subEvent, regType, adminName
- */
+
 function buildExportFilter(query: any) {
   const filter: any = {};
 
@@ -151,7 +148,8 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
 
     // 1. Fetch all registrations with student info populated
     const registrations = await EventRegistration.find({})
-      .populate('studentId', 'fullName rollNo branch mobileNo email course year section')
+      .populate('studentId', 'fullName rollNo branch mobileNo email course year section token')
+      .populate({ path: 'participantIds', select: 'fullName rollNo branch mobileNo email course year section token' })
       .populate('processedBy', 'name')
       .lean();
 
@@ -170,17 +168,39 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
             participants: [],
           };
         }
+        
+        // Add Main Student / Group Leader
         eventMap[key].participants.push({
           name: student.fullName || reg.studentName || 'N/A',
+          token: student.token || 'N/A',
           rollNo: student.rollNo || reg.rollNo || 'N/A',
           branch: student.branch || 'N/A',
           year: student.year || 'N/A',
           mobile: student.mobileNo || 'N/A',
           email: student.email || 'N/A',
-          type: reg.isGroup ? 'GROUP' : 'SINGLE',
+          type: reg.isGroup ? 'GROUP (Leader)' : 'SINGLE',
           registeredAt: reg.processedAt ? new Date(reg.processedAt).toLocaleDateString('en-IN') : 'N/A',
           subEvent: ev.subEvent || '-',
         });
+
+        // Add Group Members if any
+        if (reg.isGroup && reg.groupMembers && reg.groupMembers.length > 0) {
+          for (let i = 0; i < reg.groupMembers.length; i++) {
+            const memberObj: any = reg.participantIds?.[i] || {};
+            eventMap[key].participants.push({
+              name: memberObj.fullName || reg.groupMembers[i],
+              token: memberObj.token || 'N/A',
+              rollNo: memberObj.rollNo || '-',
+              branch: memberObj.branch || '-',
+              year: memberObj.year || '-',
+              mobile: memberObj.mobileNo || '-',
+              email: memberObj.email || '-',
+              type: 'GROUP (Member)',
+              registeredAt: reg.processedAt ? new Date(reg.processedAt).toLocaleDateString('en-IN') : 'N/A',
+              subEvent: ev.subEvent || '-',
+            });
+          }
+        }
       }
     }
 
@@ -218,13 +238,14 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
       // Set column widths
       sheet.columns = [
         { key: 'sno',  width: 5  },
+        { key: 'token', width: 22 },
         { key: 'name', width: 28 },
         { key: 'roll', width: 18 },
         { key: 'branch', width: 12 },
         { key: 'year', width: 8 },
         { key: 'mobile', width: 14 },
         { key: 'email', width: 28 },
-        { key: 'type', width: 10 },
+        { key: 'type', width: 16 },
         { key: 'subEvent', width: 16 },
         { key: 'date', width: 14 },
       ];
@@ -239,18 +260,19 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
         headerRow.getCell(1).style = eventHeaderStyle;
 
         // Column Headers
-        const colRow = sheet.addRow(['#', 'Name', 'Roll No', 'Branch', 'Year', 'Mobile', 'Email', 'Type', 'Sub Event', 'Date']);
+        const colRow = sheet.addRow(['#', 'Token ID', 'Name', 'Roll No', 'Branch', 'Year', 'Mobile', 'Email', 'Type', 'Sub Event', 'Date']);
         colRow.height = 18;
         colRow.eachCell(cell => { cell.style = columnHeaderStyle; });
 
         // Participant Rows
         if (ev.participants.length === 0) {
-          const emptyRow = sheet.addRow(['-', 'No registrations yet', '', '', '', '', '', '', '', '', '']);
-          emptyRow.getCell(2).font = { italic: true, color: { argb: 'FF666666' } };
+          const emptyRow = sheet.addRow(['-', '-', 'No registrations yet', '', '', '', '', '', '', '', '']);
+          emptyRow.getCell(3).font = { italic: true, color: { argb: 'FF666666' } };
         } else {
           ev.participants.forEach((p: any, i: number) => {
             const row = sheet.addRow([
               i + 1,
+              p.token,
               p.name,
               p.rollNo,
               p.branch,
@@ -283,20 +305,21 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
       const lines = [];
       for (const ev of sortedEvents) {
         lines.push(`\n"EVENT: ${ev.eventName}","Category: ${ev.category}","Registered: ${ev.participants.length}"`);
-        lines.push('"#","Name","Roll No","Branch","Year","Mobile","Email","Type","Sub Event","Date"');
+        lines.push('"#","Token ID","Name","Roll No","Branch","Year","Mobile","Email","Type","Sub Event","Date"');
         if (ev.participants.length === 0) {
-          lines.push('"-","No registrations yet"');
+          lines.push('"-","-","No registrations yet"');
         } else {
           ev.participants.forEach((p: any, i: number) => {
             lines.push([
               i + 1,
+              `"${p.token}"`,
               `"${p.name}"`,
               `"${p.rollNo}"`,
               `"${p.branch}"`,
               `"${p.year}"`,
               `"${p.mobile}"`,
               `"${p.email}"`,
-              p.type,
+              `"${p.type}"`,
               `"${p.subEvent}"`,
               `"${p.registeredAt}"`,
             ].join(','));
@@ -547,7 +570,7 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
       });
 
 
-    // ─── SHEET 3: EVENT-WISE REPORT ──────────────────────────────────
+    // ─── SHEET 3: EVENT-WISE REPORT (ENHANCED) ──────────────────────────
     const ws3 = workbook.addWorksheet('Event-wise Report');
     ws3.columns = [
       { header: 'Sr. No', key: 'sr', width: 8 },
@@ -557,40 +580,90 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
       { header: 'Total Registrations', key: 'total', width: 20 },
       { header: 'Single Count', key: 'single', width: 15 },
       { header: 'Group Count', key: 'group', width: 15 },
-      { header: 'Group Members Details', key: 'members', width: 50 },
+      { header: 'Participant Details (Name | Token)', key: 'members', width: 80 },
     ];
     styleHeaderRow(ws3.getRow(1));
     ws3.views = [{ state: 'frozen', ySplit: 1 }];
     ws3.autoFilter = { from: 'A1', to: 'H1' };
 
-    // Build event+subEvent map
+    // Build event+subEvent map WITH participant token details
     const evDetailMap: Record<string, {
       category: string; subEvent: string;
       total: number; single: number; group: number;
-      groupMemberDetails: string[];
+      participantDetails: Array<{ name: string; token: string; isMainStudent: boolean }>;
     }> = {};
 
     for (const reg of registrations) {
+      // Fetch main student details for this registration
+      const mainStudent: any = reg.studentId || {};
+      const mainToken = mainStudent.token || 'N/A';
+      
       for (const ev of reg.events) {
         const key = `${ev.category}|||${ev.eventName}|||${ev.subEvent || ''}`;
+        
         if (!evDetailMap[key]) {
           evDetailMap[key] = {
             category: ev.category,
             subEvent: ev.subEvent || '',
-            total: 0, single: 0, group: 0,
-            groupMemberDetails: [],
+            total: 0,
+            single: 0,
+            group: 0,
+            participantDetails: [],
           };
         }
+
         evDetailMap[key].total++;
+
         if (reg.isGroup) {
           evDetailMap[key].group++;
+          
+          // Add main student (group leader)
+          evDetailMap[key].participantDetails.push({
+            name: reg.studentName,
+            token: mainToken,
+            isMainStudent: true,
+          });
+          
+          // Add all group members with their tokens
           if (reg.groupMembers && reg.groupMembers.length > 0) {
-            evDetailMap[key].groupMemberDetails.push(
-              `[${reg.studentName}] + ${reg.groupMembers.join(', ')}`
-            );
+            // Try to fetch actual tokens from participantIds
+            for (let i = 0; i < reg.groupMembers.length; i++) {
+              const memberId = reg.participantIds?.[i];
+              let memberToken = 'N/A';
+              
+              // If we have the member in studentCache (from earlier), get their token
+              if (memberId && studentCache[memberId.toString()]) {
+                memberToken = studentCache[memberId.toString()].token || 'N/A';
+              }
+              
+              evDetailMap[key].participantDetails.push({
+                name: reg.groupMembers[i],
+                token: memberToken,
+                isMainStudent: false,
+              });
+            }
           }
         } else {
           evDetailMap[key].single++;
+          
+          // Add single participant with their token
+          evDetailMap[key].participantDetails.push({
+            name: reg.studentName,
+            token: mainToken,
+            isMainStudent: true,
+          });
+        }
+      }
+    }
+
+    // Populate studentCache with participant details for token lookup
+    for (const reg of registrations) {
+      if (reg.participantIds && reg.participantIds.length > 0) {
+        for (const pid of reg.participantIds) {
+          const pidStr = pid.toString();
+          if (!studentCache[pidStr] && reg.studentId?._id) {
+            // Inference handles by original mapping or skip if empty
+          }
         }
       }
     }
@@ -607,6 +680,12 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
     sortedEvKeys.forEach((key, i) => {
       const d = evDetailMap[key];
       const [, eventName] = key.split('|||');
+      
+      // Format participant details: "Name | Token"
+      const participantList = d.participantDetails
+        .map(p => `${p.name} | ${p.token}`)
+        .join('  --  ');
+      
       styleDataRow(ws3.addRow({
         sr: i + 1,
         cat: d.category,
@@ -615,9 +694,7 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
         total: d.total,
         single: d.single,
         group: d.group,
-        members: d.groupMemberDetails.length > 0
-          ? d.groupMemberDetails.join(' | ')
-          : '-',
+        members: participantList.length > 0 ? participantList : '-',
       }), i);
     });
 
