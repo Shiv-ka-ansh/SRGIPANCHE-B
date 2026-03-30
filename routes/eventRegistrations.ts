@@ -263,14 +263,30 @@ router.put("/:id", verifyToken, requireSuperAdmin, async (req, res, next) => {
 router.delete("/:id", verifyToken, requireAdmin, async (req, res, next) => {
   try {
     console.log(`--- REQ: Delete Registration ID: ${req.params.id}`);
-    const registration = await EventRegistration.findByIdAndDelete(
-      req.params.id,
-    );
+    const registration = await EventRegistration.findById(req.params.id);
     if (!registration) {
       return res
         .status(404)
         .json({ success: false, error: "Registration not found" });
     }
+
+    // Collect all affected student IDs (main + participants)
+    const affectedIds = [
+      registration.studentId,
+      ...(registration.participantIds || []),
+    ].filter(Boolean);
+
+    await EventRegistration.findByIdAndDelete(req.params.id);
+
+    // For each affected student, check if they have ANY remaining registrations
+    for (const sid of affectedIds) {
+      const remainingAsMain = await EventRegistration.exists({ studentId: sid });
+      const remainingAsParticipant = await EventRegistration.exists({ participantIds: sid });
+      if (!remainingAsMain && !remainingAsParticipant) {
+        await Student.findByIdAndUpdate(sid, { status: "registered" });
+      }
+    }
+
     res.json({ success: true, message: "Registration deleted successfully" });
   } catch (error) {
     next(error);

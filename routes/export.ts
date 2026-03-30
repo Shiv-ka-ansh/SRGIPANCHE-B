@@ -56,7 +56,6 @@ router.get('/csv', verifyToken, requireSuperAdmin, async (req, res, next) => {
         'Group Members': r.isGroup && r.groupMembers ? r.groupMembers.join(', ') : '',
         Categories: categoriesStr,
         Events: eventsStr,
-        'Total Amount': r.totalAmount,
         Date: r.processedAt ? new Date(r.processedAt).toISOString().split('T')[0] : '',
       };
     });
@@ -101,7 +100,6 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
       { header: 'Group Members', key: 'groupMembers', width: 30 },
       { header: 'Categories', key: 'categories', width: 15 },
       { header: 'Events', key: 'events', width: 30 },
-      { header: 'Total Amount', key: 'amount', width: 15 },
       { header: 'Date', key: 'date', width: 15 },
     ];
 
@@ -121,7 +119,6 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
         groupMembers: r.isGroup && r.groupMembers ? r.groupMembers.join(', ') : '',
         categories: categoriesStr,
         events: eventsStr,
-        amount: r.totalAmount,
         date: r.processedAt ? new Date(r.processedAt).toISOString().split('T')[0] : '',
       });
 
@@ -231,7 +228,7 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
       for (const ev of sortedEvents) {
         // Event Header Row (merged across all columns)
         const headerRow = sheet.addRow([
-          `${ev.eventName}   [${ev.category}]   ₹${ev.amount}   —   ${ev.participants.length} registered`
+          `${ev.eventName}   [${ev.category}]   —   ${ev.participants.length} registered`
         ]);
         sheet.mergeCells(`A${headerRow.number}:K${headerRow.number}`);
         headerRow.height = 22;
@@ -281,7 +278,7 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
     if (format === 'csv') {
       const lines = [];
       for (const ev of sortedEvents) {
-        lines.push(`\n"EVENT: ${ev.eventName}","Category: ${ev.category}","Amount: Rs${ev.amount}","Registered: ${ev.participants.length}"`);
+        lines.push(`\n"EVENT: ${ev.eventName}","Category: ${ev.category}","Registered: ${ev.participants.length}"`);
         lines.push('"#","Name","Roll No","Branch","Year","Mobile","Email","Type","Sub Event","Date"');
         if (ev.participants.length === 0) {
           lines.push('"-","No registrations yet"');
@@ -313,6 +310,467 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
   } catch (err: any) {
     console.error('Export error:', err);
     res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// GET /api/export/full-report
+router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next) => {
+  try {
+
+    // ─── FETCH ALL DATA ───────────────────────────────────────────────
+    const registrations = await EventRegistration.find({})
+      .populate('studentId', 'fullName rollNo branch section year mobileNo email token course')
+      .populate('processedBy', 'name')
+      .sort({ processedAt: 1 })
+      .lean();
+
+    const today = new Date().toISOString().split('T')[0];
+    const workbook = new exceljs.Workbook();
+    workbook.creator = 'Panache System';
+    workbook.created = new Date();
+
+    // ─── STYLE HELPERS ───────────────────────────────────────────────
+    const HEADER_FILL: exceljs.Fill = {
+      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' }
+    };
+    const HEADER_FONT: Partial<exceljs.Font> = { bold: true, color: { argb: 'FF000000' }, size: 11 };
+    const ALT_FILL: exceljs.Fill = {
+      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' }
+    };
+    const WHITE_FILL: exceljs.Fill = {
+      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' }
+    };
+    const THIN_BORDER: Partial<exceljs.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+    };
+
+    function styleHeaderRow(row: exceljs.Row) {
+      row.font = HEADER_FONT;
+      row.fill = HEADER_FILL;
+      row.border = THIN_BORDER;
+      row.height = 20;
+      row.alignment = { vertical: 'middle' };
+    }
+
+    function styleDataRow(row: exceljs.Row, index: number) {
+      row.fill = index % 2 === 0 ? WHITE_FILL : ALT_FILL;
+      row.border = THIN_BORDER;
+      row.alignment = { vertical: 'middle', wrapText: false };
+      row.height = 18;
+    }
+
+    function autoFitColumns(ws: exceljs.Worksheet) {
+      ws.columns?.forEach(col => {
+        let maxLen = 12;
+        col.eachCell?.({ includeEmpty: true }, cell => {
+          const val = cell.value ? String(cell.value) : '';
+          if (val.length > maxLen) maxLen = val.length;
+        });
+        col.width = Math.min(maxLen + 4, 50);
+      });
+    }
+
+    // ─── HELPER: build a unique student map ──────────────────────────
+    // Key: studentId string → { token, fullName, rollNo, branch, year, mobileNo, email }
+    const studentCache: Record<string, any> = {};
+    for (const reg of registrations) {
+      const s: any = reg.studentId || {};
+      if (s._id) {
+        studentCache[s._id.toString()] = s;
+      }
+      // Also cache participants
+      for (const pid of (reg.participantIds || [])) {
+        const pidStr = pid.toString();
+        if (!studentCache[pidStr]) {
+          // Will be populated below
+        }
+      }
+    }
+
+    // ─── SHEET 1: SUMMARY DASHBOARD ─────────────────────────────────
+    const ws1 = workbook.addWorksheet('Summary Dashboard');
+
+    // Build statistics
+    const totalRegs = registrations.length;
+    const singleRegs = registrations.filter(r => !r.isGroup).length;
+    const groupRegs = registrations.filter(r => r.isGroup).length;
+
+    // Category breakdown
+    const catMap: Record<string, number> = {};
+    const eventMap: Record<string, { count: number; category: string }> = {};
+    const dailyMap: Record<string, number> = {};
+
+    for (const reg of registrations) {
+      for (const ev of reg.events) {
+        // Category
+        catMap[ev.category] = (catMap[ev.category] || 0) + 1;
+        // Event-wise
+        if (!eventMap[ev.eventName]) {
+          eventMap[ev.eventName] = { count: 0, category: ev.category };
+        }
+        eventMap[ev.eventName].count++;
+      }
+      // Daily
+      if (reg.processedAt) {
+        const d = new Date(reg.processedAt).toISOString().split('T')[0];
+        dailyMap[d] = (dailyMap[d] || 0) + 1;
+      }
+    }
+
+    const top5 = Object.entries(eventMap)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 5);
+
+    ws1.columns = [
+      { key: 'a', width: 35 },
+      { key: 'b', width: 20 },
+      { key: 'c', width: 20 },
+    ];
+
+    // Title
+    ws1.mergeCells('A1:C1');
+    const titleRow = ws1.getRow(1);
+    titleRow.getCell(1).value = `PANACHE — Registration Summary Dashboard (as of ${today})`;
+    titleRow.getCell(1).font = { bold: true, size: 14 };
+    titleRow.getCell(1).alignment = { horizontal: 'center' };
+    titleRow.height = 28;
+
+    // Overview stats
+    ws1.addRow([]);
+    const ovHeader = ws1.addRow(['Metric', 'Value', '']);
+    styleHeaderRow(ovHeader);
+
+    [
+      ['Total Registrations', totalRegs],
+      ['Single Registrations', singleRegs],
+      ['Group Registrations', groupRegs],
+    ].forEach(([label, val], i) => {
+      styleDataRow(ws1.addRow([label, val, '']), i);
+    });
+
+    ws1.addRow([]);
+    const catHeader = ws1.addRow(['Category', 'Registrations', '% of Total']);
+    styleHeaderRow(catHeader);
+    const categoryOrder = ['General', 'Technical', 'Cultural', 'Cyber'];
+    categoryOrder.forEach((cat, i) => {
+      const count = catMap[cat] || 0;
+      const pct = totalRegs > 0 ? ((count / totalRegs) * 100).toFixed(1) + '%' : '0%';
+      styleDataRow(ws1.addRow([cat, count, pct]), i);
+    });
+    // Any extra categories
+    Object.entries(catMap)
+      .filter(([k]) => !categoryOrder.includes(k))
+      .forEach(([cat, count], i) => {
+        const pct = totalRegs > 0 ? ((count / totalRegs) * 100).toFixed(1) + '%' : '0%';
+        styleDataRow(ws1.addRow([cat, count, pct]), i + categoryOrder.length);
+      });
+
+    ws1.addRow([]);
+    const top5Header = ws1.addRow(['Top 5 Events', 'Registrations', 'Category']);
+    styleHeaderRow(top5Header);
+    top5.forEach(([name, info], i) => {
+      styleDataRow(ws1.addRow([name, info.count, info.category]), i);
+    });
+
+    ws1.addRow([]);
+    const tlHeader = ws1.addRow(['Date', 'Registrations on Day', '']);
+    styleHeaderRow(tlHeader);
+    Object.entries(dailyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([date, count], i) => {
+        styleDataRow(ws1.addRow([date, count, '']), i);
+      });
+
+    ws1.getRow(1).font = { bold: true, size: 14 };
+
+
+    // ─── SHEET 2: CATEGORY-WISE REPORT ──────────────────────────────
+    const ws2 = workbook.addWorksheet('Category-wise Report');
+    ws2.columns = [
+      { header: 'Category Name', key: 'cat', width: 18 },
+      { header: 'Total Events', key: 'totalEvents', width: 15 },
+      { header: 'Total Registrations', key: 'totalRegs', width: 20 },
+      { header: 'Single Registrations', key: 'singleRegs', width: 20 },
+      { header: 'Group Registrations', key: 'groupRegs', width: 20 },
+      { header: 'Events List', key: 'events', width: 60 },
+    ];
+    styleHeaderRow(ws2.getRow(1));
+    ws2.views = [{ state: 'frozen', ySplit: 1 }];
+    ws2.autoFilter = { from: 'A1', to: 'F1' };
+
+    // Build category data
+    const catDetailMap: Record<string, {
+      totalRegs: number; singleRegs: number; groupRegs: number; events: Set<string>
+    }> = {};
+
+    for (const reg of registrations) {
+      for (const ev of reg.events) {
+        if (!catDetailMap[ev.category]) {
+          catDetailMap[ev.category] = { totalRegs: 0, singleRegs: 0, groupRegs: 0, events: new Set() };
+        }
+        catDetailMap[ev.category].totalRegs++;
+        if (reg.isGroup) catDetailMap[ev.category].groupRegs++;
+        else catDetailMap[ev.category].singleRegs++;
+        catDetailMap[ev.category].events.add(ev.eventName);
+      }
+    }
+
+    categoryOrder.forEach((cat, i) => {
+      const d = catDetailMap[cat] || { totalRegs: 0, singleRegs: 0, groupRegs: 0, events: new Set() };
+      styleDataRow(ws2.addRow({
+        cat,
+        totalEvents: d.events.size,
+        totalRegs: d.totalRegs,
+        singleRegs: d.singleRegs,
+        groupRegs: d.groupRegs,
+        events: [...d.events].sort().join(', '),
+      }), i);
+    });
+    Object.entries(catDetailMap)
+      .filter(([k]) => !categoryOrder.includes(k))
+      .forEach(([cat, d], i) => {
+        styleDataRow(ws2.addRow({
+          cat,
+          totalEvents: d.events.size,
+          totalRegs: d.totalRegs,
+          singleRegs: d.singleRegs,
+          groupRegs: d.groupRegs,
+          events: [...d.events].sort().join(', '),
+        }), i + categoryOrder.length);
+      });
+
+
+    // ─── SHEET 3: EVENT-WISE REPORT ──────────────────────────────────
+    const ws3 = workbook.addWorksheet('Event-wise Report');
+    ws3.columns = [
+      { header: 'Sr. No', key: 'sr', width: 8 },
+      { header: 'Category', key: 'cat', width: 14 },
+      { header: 'Event Name', key: 'event', width: 30 },
+      { header: 'Sub Event', key: 'subEvent', width: 20 },
+      { header: 'Total Registrations', key: 'total', width: 20 },
+      { header: 'Single Count', key: 'single', width: 15 },
+      { header: 'Group Count', key: 'group', width: 15 },
+      { header: 'Group Members Details', key: 'members', width: 50 },
+    ];
+    styleHeaderRow(ws3.getRow(1));
+    ws3.views = [{ state: 'frozen', ySplit: 1 }];
+    ws3.autoFilter = { from: 'A1', to: 'H1' };
+
+    // Build event+subEvent map
+    const evDetailMap: Record<string, {
+      category: string; subEvent: string;
+      total: number; single: number; group: number;
+      groupMemberDetails: string[];
+    }> = {};
+
+    for (const reg of registrations) {
+      for (const ev of reg.events) {
+        const key = `${ev.category}|||${ev.eventName}|||${ev.subEvent || ''}`;
+        if (!evDetailMap[key]) {
+          evDetailMap[key] = {
+            category: ev.category,
+            subEvent: ev.subEvent || '',
+            total: 0, single: 0, group: 0,
+            groupMemberDetails: [],
+          };
+        }
+        evDetailMap[key].total++;
+        if (reg.isGroup) {
+          evDetailMap[key].group++;
+          if (reg.groupMembers && reg.groupMembers.length > 0) {
+            evDetailMap[key].groupMemberDetails.push(
+              `[${reg.studentName}] + ${reg.groupMembers.join(', ')}`
+            );
+          }
+        } else {
+          evDetailMap[key].single++;
+        }
+      }
+    }
+
+    // Sort by category order then event name
+    const sortedEvKeys = Object.keys(evDetailMap).sort((a, b) => {
+      const [catA, nameA] = a.split('|||');
+      const [catB, nameB] = b.split('|||');
+      const ci = categoryOrder.indexOf(catA) - categoryOrder.indexOf(catB);
+      if (ci !== 0) return ci;
+      return nameA.localeCompare(nameB);
+    });
+
+    sortedEvKeys.forEach((key, i) => {
+      const d = evDetailMap[key];
+      const [, eventName] = key.split('|||');
+      styleDataRow(ws3.addRow({
+        sr: i + 1,
+        cat: d.category,
+        event: eventName,
+        subEvent: d.subEvent || '-',
+        total: d.total,
+        single: d.single,
+        group: d.group,
+        members: d.groupMemberDetails.length > 0
+          ? d.groupMemberDetails.join(' | ')
+          : '-',
+      }), i);
+    });
+
+
+    // ─── SHEET 4: STUDENT DETAILS ────────────────────────────────────
+    const ws4 = workbook.addWorksheet('Student Details');
+    ws4.columns = [
+      { header: 'Sr. No', key: 'sr', width: 8 },
+      { header: 'Token ID', key: 'token', width: 22 },
+      { header: 'Student Name', key: 'name', width: 25 },
+      { header: 'Roll No', key: 'roll', width: 15 },
+      { header: 'Branch', key: 'branch', width: 12 },
+      { header: 'Year', key: 'year', width: 8 },
+      { header: 'Mobile No', key: 'mobile', width: 14 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Registered Events', key: 'events', width: 50 },
+      { header: 'Registration Type', key: 'type', width: 18 },
+      { header: 'Registered Date', key: 'date', width: 16 },
+      { header: 'Processed By (Admin)', key: 'admin', width: 22 },
+      { header: 'Remark', key: 'remark', width: 30 },
+    ];
+    styleHeaderRow(ws4.getRow(1));
+    ws4.views = [{ state: 'frozen', ySplit: 1 }];
+    ws4.autoFilter = { from: 'A1', to: 'M1' };
+
+    // De-duplicate by studentId — merge all their registrations into one row
+    const studentRegMap: Record<string, {
+      token: string; name: string; roll: string; branch: string; year: string;
+      mobile: string; email: string;
+      allEvents: string[]; types: Set<string>;
+      latestDate: string; admins: Set<string>; remarks: string[];
+    }> = {};
+
+    for (const reg of registrations) {
+      const s: any = reg.studentId || {};
+      const sid = s._id ? s._id.toString() : reg.studentId?.toString() || '';
+      if (!sid) continue;
+
+      if (!studentRegMap[sid]) {
+        studentRegMap[sid] = {
+          token: s.token || '',
+          name: s.fullName || reg.studentName || 'N/A',
+          roll: s.rollNo || reg.rollNo || 'N/A',
+          branch: s.branch || 'N/A',
+          year: s.year || 'N/A',
+          mobile: s.mobileNo || 'N/A',
+          email: s.email || 'N/A',
+          allEvents: [],
+          types: new Set(),
+          latestDate: reg.processedAt ? new Date(reg.processedAt).toLocaleDateString('en-IN') : 'N/A',
+          admins: new Set(),
+          remarks: [],
+        };
+      }
+
+      for (const ev of reg.events) {
+        const label = ev.subEvent ? `${ev.eventName} (${ev.subEvent})` : ev.eventName;
+        studentRegMap[sid].allEvents.push(label);
+      }
+      studentRegMap[sid].types.add(reg.isGroup ? 'Group' : 'Single');
+      if ((reg as any).processedBy?.name) {
+        studentRegMap[sid].admins.add((reg as any).processedBy.name);
+      }
+      if ((reg as any).remark) {
+        studentRegMap[sid].remarks.push((reg as any).remark);
+      }
+      if (reg.processedAt) {
+        const d = new Date(reg.processedAt).toLocaleDateString('en-IN');
+        studentRegMap[sid].latestDate = d;
+      }
+    }
+
+    Object.values(studentRegMap)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach((s, i) => {
+        styleDataRow(ws4.addRow({
+          sr: i + 1,
+          token: s.token,
+          name: s.name,
+          roll: s.roll,
+          branch: s.branch,
+          year: s.year,
+          mobile: s.mobile,
+          email: s.email,
+          events: [...new Set(s.allEvents)].join(', '),
+          type: [...s.types].join(' + '),
+          date: s.latestDate,
+          admin: [...s.admins].join(', '),
+          remark: s.remarks.filter(Boolean).join('; ') || '-',
+        }), i);
+      });
+
+
+    // ─── SHEET 5: GROUP REGISTRATIONS ───────────────────────────────
+    const ws5 = workbook.addWorksheet('Group Registrations');
+    ws5.columns = [
+      { header: 'Sr. No', key: 'sr', width: 8 },
+      { header: 'Token ID', key: 'token', width: 22 },
+      { header: 'Main Student Name', key: 'name', width: 25 },
+      { header: 'Roll No', key: 'roll', width: 15 },
+      { header: 'Group Members', key: 'members', width: 50 },
+      { header: 'Total in Group', key: 'count', width: 15 },
+      { header: 'Events Registered', key: 'events', width: 45 },
+      { header: 'Processed By (Admin)', key: 'admin', width: 22 },
+      { header: 'Registered Date', key: 'date', width: 16 },
+    ];
+    styleHeaderRow(ws5.getRow(1));
+    ws5.views = [{ state: 'frozen', ySplit: 1 }];
+    ws5.autoFilter = { from: 'A1', to: 'I1' };
+
+    const groupRegsFiltered = registrations
+      .filter(r => r.isGroup)
+      .sort((a, b) => {
+        const na = a.studentName || '';
+        const nb = b.studentName || '';
+        return na.localeCompare(nb);
+      });
+
+    groupRegsFiltered.forEach((reg, i) => {
+      const s: any = reg.studentId || {};
+      const evNames = reg.events.map((e: any) =>
+        e.subEvent ? `${e.eventName} (${e.subEvent})` : e.eventName
+      ).join(', ');
+      const members = reg.groupMembers && reg.groupMembers.length > 0
+        ? reg.groupMembers.join(', ')
+        : '-';
+      styleDataRow(ws5.addRow({
+        sr: i + 1,
+        token: s.token || '',
+        name: s.fullName || reg.studentName || 'N/A',
+        roll: s.rollNo || reg.rollNo || 'N/A',
+        members,
+        count: (reg.groupMembers?.length || 0) + 1,
+        events: evNames,
+        admin: (reg as any).processedBy?.name || 'N/A',
+        date: reg.processedAt ? new Date(reg.processedAt).toLocaleDateString('en-IN') : 'N/A',
+      }), i);
+    });
+
+
+    // ─── AUTO-FIT ALL SHEETS ─────────────────────────────────────────
+    [ws1, ws2, ws3, ws4, ws5].forEach(ws => autoFitColumns(ws));
+
+
+    // ─── SEND RESPONSE ───────────────────────────────────────────────
+    const filename = `Panache-Registration-Report-${today}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    return res.end();
+
+  } catch (err: any) {
+    console.error('Full report export error:', err);
+    res.status(500).json({ error: 'Export failed', details: err.message });
   }
 });
 
