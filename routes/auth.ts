@@ -39,6 +39,7 @@ router.post('/login', async (req, res, next) => {
       email: user.email,
       role: user.role,
       name: user.name,
+      allowedTabs: user.allowedTabs,
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET || 'fallback_secret', {
@@ -59,13 +60,27 @@ router.post('/login', async (req, res, next) => {
 });
 
 // POST /api/auth/verify
-router.post('/verify', verifyToken, (req: AuthRequest, res) => {
-  // If middleware passes, token is valid
-  res.json({
-    success: true,
-    valid: true,
-    user: req.user,
-  });
+router.post('/verify', verifyToken, async (req: AuthRequest, res) => {
+  // Fetch full user data to get up-to-date allowedTabs
+  try {
+    const fullUser = await User.findById(req.user?.id).select('-passwordHash');
+    if (!fullUser) {
+      return res.status(401).json({ success: false, error: 'User not found' });
+    }
+    res.json({
+      success: true,
+      valid: true,
+      user: {
+        id: fullUser._id,
+        name: fullUser.name,
+        email: fullUser.email,
+        role: fullUser.role,
+        allowedTabs: fullUser.allowedTabs,
+      },
+    });
+  } catch {
+    res.status(500).json({ success: false, error: 'Failed to verify' });
+  }
 });
 
 export default router;

@@ -39,7 +39,7 @@ router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
       email,
       passwordHash,
       role: userRole,
-      allowedTabs: allowedTabs || (userRole === 'superadmin' ? ['overview', 'students', 'events', 'registrations', 'schedule', 'users'] : ['students', 'registrations']),
+      allowedTabs: allowedTabs || (userRole === 'superadmin' ? ['overview', 'single', 'group', 'students', 'events', 'registrations', 'schedule', 'users'] : ['single', 'group', 'students', 'registrations']),
     });
 
     await user.save();
@@ -53,6 +53,52 @@ router.post('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
         role: user.role,
         allowedTabs: user.allowedTabs,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/users/:id (SuperAdmin only)
+router.put('/:id', verifyToken, requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { name, email, password, role, allowedTabs } = req.body;
+    
+    // Find the user first
+    const userToUpdate = await User.findById(req.params.id);
+    if (!userToUpdate) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Check if email is being changed and if it already exists
+    if (email && email.toLowerCase() !== userToUpdate.email) {
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        return res.status(400).json({ success: false, error: 'Email already in use by another user' });
+      }
+      userToUpdate.email = email.toLowerCase();
+    }
+
+    if (name) userToUpdate.name = name;
+    if (role) userToUpdate.role = role === 'superadmin' ? 'superadmin' : 'admin';
+    if (allowedTabs) userToUpdate.allowedTabs = allowedTabs;
+    
+    if (password && password.trim().length > 0) {
+      const salt = await bcrypt.genSalt(10);
+      userToUpdate.passwordHash = await bcrypt.hash(password, salt);
+    }
+    
+    await userToUpdate.save();
+    
+    res.json({
+      success: true,
+      user: {
+        _id: userToUpdate._id,
+        name: userToUpdate.name,
+        email: userToUpdate.email,
+        role: userToUpdate.role,
+        allowedTabs: userToUpdate.allowedTabs,
+      }
     });
   } catch (error) {
     next(error);

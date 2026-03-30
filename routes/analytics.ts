@@ -7,7 +7,7 @@ import { verifyToken, requireSuperAdmin } from '../middleware/auth';
 const router = Router();
 
 // GET /api/analytics
-router.get('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
+router.get('/', verifyToken, async (req, res, next) => {
   try {
     const totalStudents = await Student.countDocuments();
     
@@ -70,6 +70,7 @@ router.get('/', verifyToken, requireSuperAdmin, async (req, res, next) => {
       stats: {
         totalStudents,
         processedStudents,
+        totalRegistrations: registrations.length,
         totalRevenue,
         categoryBreakdown,
         categoryCounts,
