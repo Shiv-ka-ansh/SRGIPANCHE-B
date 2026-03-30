@@ -21,6 +21,10 @@ function buildExportFilter(query: any) {
     filter['events.subEvent'] = { $regex: new RegExp(`^${query.subEvent}$`, 'i') };
   }
 
+  if (query.eventName) {
+    filter['events.eventName'] = { $regex: new RegExp(`^${query.eventName}$`, 'i') };
+  }
+
   if (query.regType) {
     if (query.regType === 'single') filter.isGroup = false;
     if (query.regType === 'group') filter.isGroup = true;
@@ -202,13 +206,13 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
         alignment: { vertical: 'middle', horizontal: 'left' } as const,
       };
       const columnHeaderStyle = {
-        font: { bold: true, size: 10, color: { argb: 'FFCCFF00' } },
-        fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF121212' } },
+        font: { bold: true, size: 10, color: { argb: 'FF121212' } },
+        fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFEFEFEF' } },
         alignment: { vertical: 'middle', horizontal: 'left' } as const,
       };
       const rowStyle = {
-        font: { size: 10, color: { argb: 'FFFFFFFF' } },
-        fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF1A1A1A' } },
+        font: { size: 10, color: { argb: 'FF050505' } },
+        fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFFFFFF' } },
       };
 
       // Set column widths
@@ -259,7 +263,7 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
             ]);
             row.eachCell(cell => {
               cell.style = rowStyle;
-              cell.border = { bottom: { style: 'thin', color: { argb: 'FF333333' } } };
+              cell.border = { bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
             });
           });
         }
