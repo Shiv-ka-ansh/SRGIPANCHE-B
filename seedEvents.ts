@@ -63,7 +63,7 @@ const EVENT_CATEGORIES: any = {
       },
       { 
         name: 'SANYOG SE', 
-        amount: 40, 
+        amount: 30, 
         description: 'What if luck is all you need to win? Sanyog Se is an exciting luck-based event where every draw brings a new surprise and endless anticipation.',
         rules: [
           'Participants will take part in a random lucky draw.',
