@@ -140,6 +140,7 @@ const EVENT_CATEGORIES: any = {
       { 
         name: 'RANGOLI', 
         amount: 50, 
+        isTeam: true,
         description: 'Not just colors, it’s a whole vibe! Rangoli is where creativity meets tradition, and the ground becomes your canvas to create something truly eye-catching.',
         rules: [
           'Participants will design vibrant rangoli based on the given theme.',
@@ -157,8 +158,8 @@ const EVENT_CATEGORIES: any = {
       { name: 'POSTER PRESENTATION', amount: 50 },
       { name: 'CIRCUIT JHAMELA', amount: 50 },
       { name: 'THE MECHANIST', amount: 50 },
-      { name: 'SKY SCRAPPER', amount: 50 },
-      { name: 'SOLID HAI BOSS', amount: 100 },
+      { name: 'SKY SCRAPPER', amount: 50, isTeam: true },
+      { name: 'SOLID HAI BOSS', amount: 100, isTeam: true },
       { name: 'ALTITUDE WINNER', amount: 100 },
       { name: 'WAR OF MACHINES', amount: 100 },
       { name: 'WORTHY TRASH', amount: 50 },
@@ -190,7 +191,7 @@ const EVENT_CATEGORIES: any = {
       { name: 'CODE DEBUGGER', amount: 50 },
       { name: 'BLIND VIEWER', amount: 50 },
       { name: 'BATTLE WITH BYTE', amount: 50 },
-      { name: 'GUESS THE TECH', amount: 50 }
+      { name: 'GUESS THE TECH', amount: 50, isTeam: true }
     ]
   }
 };
@@ -217,6 +218,7 @@ const seedEvents = async () => {
               description: (ev as any).description || '',
               rules: (ev as any).rules || [],
               subEvents: ev.subEvents || [],
+              isTeam: (ev as any).isTeam || false,
               color: color
             }
           },

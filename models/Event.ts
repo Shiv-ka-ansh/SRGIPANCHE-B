@@ -8,6 +8,7 @@ export interface IEvent extends Document {
   color: string;
   description?: string;
   rules?: string[];
+  isTeam?: boolean;
   coordinators?: { name: string; phone: string }[];
 }
 
@@ -19,6 +20,7 @@ const EventSchema: Schema = new Schema({
   color: { type: String, required: true },
   description: { type: String },
   rules: [{ type: String }],
+  isTeam: { type: Boolean, default: false },
   coordinators: [{
     name: { type: String },
     phone: { type: String }

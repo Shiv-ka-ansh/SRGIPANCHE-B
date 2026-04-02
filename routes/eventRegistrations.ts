@@ -103,6 +103,7 @@ router.post(
         student.fullName,
         events,
         totalAmount,
+        student.token,
       )
         .then(() => {
           registration.emailSent = true;
@@ -319,6 +320,7 @@ router.post(
         student.fullName,
         registration.events,
         registration.totalAmount,
+        student.token,
       );
 
       if (success) {

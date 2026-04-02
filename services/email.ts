@@ -109,6 +109,7 @@ export const sendEventConfirmation = async (
   name: string,
   events: any[],
   totalAmount: number,
+  token: string,
 ) => {
   const categories: Record<string, any[]> = {};
   events.forEach((ev) => {
@@ -137,22 +138,29 @@ export const sendEventConfirmation = async (
 
     const html = `
       <h2>Hi ${name},</h2>
-      <p>Here are the events you have been registered for:</p>
+      <p>Congratulations! Your registration for the following event(s) at PANACHE 2K26 is confirmed.</p>
+      
+      <div style="background-color:#121212;color:#CCFF00;padding:20px;border:2px solid #CCFF00;margin:20px 0;display:inline-block;">
+        <h3 style="margin:0;color:#fff;">YOUR TOKEN:</h3>
+        <h1 style="font-size:40px;margin:10px 0;letter-spacing:5px;">${token}</h1>
+        <p style="margin:0;font-size:14px;color:#ccc;">Keep this safe - you will need it at the venue</p>
+      </div>
+
       <div style="background-color:#f9f9f9;padding:20px;border:1px solid #ddd;margin:20px 0;">
         ${eventsHtml}
         <hr style="border:1px solid #ccc;margin:20px 0;"/>
-        <h2 style="margin:0;">Total Amount: Rs.${totalAmount}</h2>
+        <h2 style="margin:0;">Total Amount Paid: Rs.${totalAmount}</h2>
       </div>
-      <p>Please keep this email as your registration receipt.</p>
+      <p>Please present your token at the event venue for participation.</p>
       <p>Best of luck!</p>
     `;
 
-    const text = `Hi ${name},\n\nRegistered events:\n${eventsText}\nTotal: Rs.${totalAmount}\n\nBest of luck!`;
+    const text = `Hi ${name},\n\nYour registration for PANACHE 2K26 is confirmed.\n\nYOUR TOKEN: ${token}\n\nRegistered events:\n${eventsText}\nTotal: Rs.${totalAmount}\n\nBest of luck!`;
 
     const raw = encodeEmail(
       email,
-      `"PANACHE 2K26" <${process.env.GMAIL_USER}>`,
-      "PANACHE 2K26 - Your Event Registrations",
+      `"🎉PANACHE 2K26" <${process.env.GMAIL_USER}>`,
+      "🎉PANACHE 2K26 - Event Registration Confirmed",
       html,
       text,
     );
