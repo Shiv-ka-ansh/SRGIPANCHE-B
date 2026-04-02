@@ -36,6 +36,7 @@ router.get('/csv', verifyToken, requireSuperAdmin, async (req, res, next) => {
     const filter = buildExportFilter(req.query);
     let registrations = await EventRegistration.find(filter)
       .populate('processedBy', 'name')
+      .populate('studentId', 'branch year mobileNo')
       .sort({ processedAt: 1 })
       .lean();
 
@@ -49,10 +50,14 @@ router.get('/csv', verifyToken, requireSuperAdmin, async (req, res, next) => {
     const data = registrations.map((r: any, index: number) => {
       const eventsStr = r.events.map((e: any) => e.eventName).join(', ');
       const categoriesStr = [...new Set(r.events.map((e: any) => e.category))].join(', ');
+      const student = r.studentId || {};
       return {
         Sr: index + 1,
         'Student Name': r.studentName,
         'Roll No': r.rollNo,
+        Branch: student.branch || 'N/A',
+        Year: student.year || 'N/A',
+        'Mobile No': student.mobileNo || 'N/A',
         Type: r.isGroup ? 'Group' : 'Single',
         'Group Members': r.isGroup && r.groupMembers ? r.groupMembers.join(', ') : '',
         Categories: categoriesStr,
@@ -80,6 +85,7 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
     const filter = buildExportFilter(req.query);
     let registrations = await EventRegistration.find(filter)
       .populate('processedBy', 'name')
+      .populate('studentId', 'branch year mobileNo')
       .sort({ processedAt: 1 })
       .lean();
 
@@ -97,6 +103,9 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
       { header: 'Sr', key: 'sr', width: 5 },
       { header: 'Student Name', key: 'name', width: 20 },
       { header: 'Roll No', key: 'rollNo', width: 15 },
+      { header: 'Branch', key: 'branch', width: 12 },
+      { header: 'Year', key: 'year', width: 8 },
+      { header: 'Mobile No', key: 'mobile', width: 14 },
       { header: 'Type', key: 'type', width: 10 },
       { header: 'Group Members', key: 'groupMembers', width: 30 },
       { header: 'Categories', key: 'categories', width: 15 },
@@ -116,6 +125,9 @@ router.get('/excel', verifyToken, requireSuperAdmin, async (req, res, next) => {
         sr: index + 1,
         name: r.studentName,
         rollNo: r.rollNo,
+        branch: r.studentId?.branch || 'N/A',
+        year: r.studentId?.year || 'N/A',
+        mobile: r.studentId?.mobileNo || 'N/A',
         type: r.isGroup ? 'Group' : 'Single',
         groupMembers: r.isGroup && r.groupMembers ? r.groupMembers.join(', ') : '',
         categories: categoriesStr,
@@ -149,7 +161,7 @@ router.get('/event-participants', verifyToken, requireSuperAdmin, async (req, re
     // 1. Fetch all registrations with student info populated
     const registrations = await EventRegistration.find({})
       .populate('studentId', 'fullName rollNo branch mobileNo email course year section token')
-      .populate({ path: 'participantIds', select: 'fullName rollNo branch mobileNo email course year section token' })
+      .populate('participantIds', 'fullName rollNo branch mobileNo email course year section token')
       .populate('processedBy', 'name')
       .lean();
 
@@ -347,6 +359,7 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
     // ─── FETCH ALL DATA ───────────────────────────────────────────────
     const registrations = await EventRegistration.find({})
       .populate('studentId', 'fullName rollNo branch section year mobileNo email token course')
+      .populate('participantIds', 'fullName rollNo branch section year mobileNo email token course')
       .populate('processedBy', 'name')
       .sort({ processedAt: 1 })
       .lean();
@@ -590,7 +603,14 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
     const evDetailMap: Record<string, {
       category: string; subEvent: string;
       total: number; single: number; group: number;
-      participantDetails: Array<{ name: string; token: string; isMainStudent: boolean }>;
+      participantDetails: Array<{
+        name: string;
+        token: string;
+        isMainStudent: boolean;
+        branch?: string;
+        year?: string;
+        mobile?: string;
+      }>;
     }> = {};
 
     for (const reg of registrations) {
@@ -622,6 +642,9 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
             name: reg.studentName,
             token: mainToken,
             isMainStudent: true,
+            branch: mainStudent.branch || 'N/A',
+            year: mainStudent.year || 'N/A',
+            mobile: mainStudent.mobileNo || 'N/A',
           });
           
           // Add all group members with their tokens
@@ -630,16 +653,25 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
             for (let i = 0; i < reg.groupMembers.length; i++) {
               const memberId = reg.participantIds?.[i];
               let memberToken = 'N/A';
+              let memberBranch = 'N/A';
+              let memberYear = 'N/A';
+              let memberMobile = 'N/A';
               
-              // If we have the member in studentCache (from earlier), get their token
               if (memberId && studentCache[memberId.toString()]) {
-                memberToken = studentCache[memberId.toString()].token || 'N/A';
+                const s = studentCache[memberId.toString()];
+                memberToken = s.token || 'N/A';
+                memberBranch = s.branch || 'N/A';
+                memberYear = s.year || 'N/A';
+                memberMobile = s.mobileNo || 'N/A';
               }
               
               evDetailMap[key].participantDetails.push({
                 name: reg.groupMembers[i],
                 token: memberToken,
                 isMainStudent: false,
+                branch: memberBranch,
+                year: memberYear,
+                mobile: memberMobile,
               });
             }
           }
@@ -651,6 +683,9 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
             name: reg.studentName,
             token: mainToken,
             isMainStudent: true,
+            branch: mainStudent.branch || 'N/A',
+            year: mainStudent.year || 'N/A',
+            mobile: mainStudent.mobileNo || 'N/A',
           });
         }
       }
@@ -659,10 +694,9 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
     // Populate studentCache with participant details for token lookup
     for (const reg of registrations) {
       if (reg.participantIds && reg.participantIds.length > 0) {
-        for (const pid of reg.participantIds) {
-          const pidStr = pid.toString();
-          if (!studentCache[pidStr] && reg.studentId?._id) {
-            // Inference handles by original mapping or skip if empty
+        for (const pidObj of (reg.participantIds as any[])) {
+          if (pidObj && pidObj._id) {
+            studentCache[pidObj._id.toString()] = pidObj;
           }
         }
       }
@@ -683,7 +717,7 @@ router.get('/full-report', verifyToken, requireSuperAdmin, async (req, res, next
       
       // Format participant details: "Name | Token"
       const participantList = d.participantDetails
-        .map(p => `${p.name} | ${p.token}`)
+        .map(p => `${p.name} | ${p.token} | ${p.branch} | ${p.year} | ${p.mobile}`)
         .join('  --  ');
       
       styleDataRow(ws3.addRow({
