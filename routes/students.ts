@@ -218,7 +218,7 @@ router.post(
 // GET /api/students (Admin/SuperAdmin)
 router.get("/", verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const { search, branch } = req.query;
+    const { search, branch, course } = req.query;
     let query: any = {};
 
     if (search) {
@@ -227,7 +227,12 @@ router.get("/", verifyToken, requireAdmin, async (req, res, next) => {
         { fullName: searchRegex },
         { rollNo: searchRegex },
         { email: searchRegex },
+        { token: searchRegex },
       ];
+    }
+
+    if (course && course !== "All") {
+      query.course = course;
     }
 
     if (branch && branch !== "All") {
